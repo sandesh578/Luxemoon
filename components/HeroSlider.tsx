@@ -16,7 +16,10 @@ interface Slide {
 
 export const HeroSlider = ({ slides }: { slides: Slide[] }) => {
     const [current, setCurrent] = useState(0);
+    const [isMobileViewport, setIsMobileViewport] = useState(false);
     const scrollRef = useRef<HTMLDivElement>(null);
+    const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+    const scrollRafRef = useRef<number | null>(null);
     const slideCount = slides?.length || 0;
 
     const scrollToIndex = useCallback((index: number) => {
@@ -28,125 +31,165 @@ export const HeroSlider = ({ slides }: { slides: Slide[] }) => {
         });
     }, []);
 
-    useEffect(() => {
+    // Auto-advance timer. Resets on manual interaction.
+    const resetTimer = useCallback(() => {
+        if (timerRef.current) clearInterval(timerRef.current);
         if (slideCount <= 1) return;
-        const timer = setInterval(() => {
+        timerRef.current = setInterval(() => {
             setCurrent((prev) => {
                 const next = (prev + 1) % slideCount;
                 scrollToIndex(next);
                 return next;
             });
         }, 6000);
-        return () => clearInterval(timer);
     }, [slideCount, scrollToIndex]);
 
-    const handleScroll = () => {
-        if (!scrollRef.current) return;
-        const slideWidth = scrollRef.current.clientWidth;
-        const scrollPosition = scrollRef.current.scrollLeft;
-        const newIndex = Math.round(scrollPosition / slideWidth);
-        if (newIndex !== current) {
-            setCurrent(newIndex);
+    useEffect(() => {
+        resetTimer();
+        return () => {
+            if (timerRef.current) clearInterval(timerRef.current);
+            if (scrollRafRef.current !== null) cancelAnimationFrame(scrollRafRef.current);
+        };
+    }, [resetTimer]);
+
+    useEffect(() => {
+        const mediaQuery = window.matchMedia('(max-width: 767px)');
+        const syncViewport = () => setIsMobileViewport(mediaQuery.matches);
+        syncViewport();
+
+        if (typeof mediaQuery.addEventListener === 'function') {
+            mediaQuery.addEventListener('change', syncViewport);
+            return () => mediaQuery.removeEventListener('change', syncViewport);
         }
-    };
+
+        mediaQuery.addListener(syncViewport);
+        return () => mediaQuery.removeListener(syncViewport);
+    }, []);
+
+    const handleScroll = useCallback(() => {
+        if (!scrollRef.current) return;
+        if (scrollRafRef.current !== null) return;
+
+        scrollRafRef.current = requestAnimationFrame(() => {
+            if (!scrollRef.current) {
+                scrollRafRef.current = null;
+                return;
+            }
+
+            const slideWidth = scrollRef.current.clientWidth;
+            const scrollPosition = scrollRef.current.scrollLeft;
+            const nextIndex = Math.round(scrollPosition / slideWidth);
+            setCurrent((prev) => (prev === nextIndex ? prev : nextIndex));
+            scrollRafRef.current = null;
+        });
+    }, []);
+
+    const goToSlide = useCallback((index: number) => {
+        scrollToIndex(index);
+        setCurrent(index);
+        resetTimer();
+    }, [scrollToIndex, resetTimer]);
 
     if (!slides || slideCount === 0) return null;
 
     return (
-        <div className="relative w-full aspect-[4/5] sm:aspect-[4/3] md:aspect-video overflow-hidden bg-stone-900 group">
-            <style jsx>{`
-                .hide-scrollbar::-webkit-scrollbar {
-                    display: none;
-                }
-                .hide-scrollbar {
-                    -ms-overflow-style: none;
-                    scrollbar-width: none;
-                }
-            `}</style>
-            
-            <div 
+        <div
+            className="relative w-full aspect-video overflow-hidden bg-stone-900 group"
+            style={{ touchAction: 'pan-y' }}
+        >
+            <div
                 ref={scrollRef}
                 onScroll={handleScroll}
-                className="flex w-full h-full overflow-x-auto snap-x snap-mandatory hide-scrollbar touch-pan-x"
+                className="flex w-full h-full overflow-x-auto snap-x snap-mandatory no-scrollbar"
+                style={{ touchAction: 'pan-x pan-y', willChange: 'scroll-position' }}
             >
-                {slides.map((slide, index) => (
-                    <div
-                        key={index}
-                        className="w-full h-full flex-shrink-0 snap-center relative"
-                    >
-                        {/* Desktop Image */}
-                        <Image
-                            src={slide.image || "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"}
-                            className={`object-cover object-center ${slide.mobileImage ? 'hidden md:block' : ''}`}
-                            alt={slide.title || "Luxe Moon Hero"}
-                            fill
-                            priority={index === 0}
-                            sizes="100vw"
-                        />
-                        {/* Mobile Image */}
-                        {slide.mobileImage && (
-                            <Image
-                                src={slide.mobileImage}
-                                className="object-cover object-center block md:hidden"
-                                alt={slide.title || "Luxe Moon Hero Mobile"}
-                                fill
-                                priority={false}
-                                sizes="100vw"
-                            />
-                        )}
-                        
-                        {/* Overlay Gradient - Refined to be subtle */}
-                        <div className="absolute inset-0 bg-black/15 transition-opacity duration-300 pointer-events-none" />
-                        <div className="absolute inset-x-0 bottom-0 h-2/3 bg-gradient-to-t from-black/65 via-black/25 to-transparent pointer-events-none" />
+                {slides.map((slide, index) => {
+                    const isActive = index === current;
+                    const isFirst = index === 0;
+                    const fallbackSrc = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+                    const desktopSrc = slide.image || fallbackSrc;
+                    const imgSrc = (isMobileViewport && slide.mobileImage) ? slide.mobileImage : desktopSrc;
 
-                        <div className="absolute inset-0 flex items-center justify-center text-center px-6 md:px-12">
-                            <div className={`max-w-4xl space-y-5 md:space-y-8 transition-all duration-700 w-full`}>
-                                <h2 className="font-serif text-4xl sm:text-5xl md:text-6xl lg:text-7xl text-white leading-[1.08] drop-shadow-lg tracking-tight">
-                                    {slide.title}
-                                </h2>
-                                <p className="text-white/90 text-sm sm:text-base md:text-lg lg:text-xl font-light tracking-wide max-w-2xl mx-auto leading-relaxed drop-shadow-md">
-                                    {slide.subtitle}
-                                </p>
-                                <div className="pt-4 md:pt-8 flex justify-center w-full">
-                                    <Link
-                                        href={slide.link || '/shop'}
-                                        className="inline-flex items-center justify-center gap-3 group px-8 py-3.5 md:px-10 md:py-4 bg-white text-stone-900 font-bold rounded-full hover:bg-stone-100 hover:scale-105 transition-all shadow-xl text-sm md:text-base active:scale-95 border border-white/80"
+                    return (
+                        <div
+                            key={index}
+                            className="w-full h-full flex-shrink-0 snap-center relative"
+                        >
+                            <Image
+                                src={imgSrc}
+                                className="object-cover object-center"
+                                alt={slide.title || 'Luxe Moon Hero'}
+                                fill
+                                quality={isFirst ? 85 : 75}
+                                priority={isFirst}
+                                loading={isFirst ? 'eager' : 'lazy'}
+                                sizes="(max-width: 768px) 100vw, 100vw"
+                                fetchPriority={isFirst ? 'high' : 'auto'}
+                                decoding={isFirst ? 'sync' : 'async'}
+                            />
+
+                            <div className="absolute inset-0 bg-black/25 pointer-events-none" />
+
+                            <div className="absolute inset-0 flex items-center justify-center text-center px-4 sm:px-6 md:px-12">
+                                <div
+                                    className={`max-w-4xl space-y-2 sm:space-y-3 md:space-y-5 w-full transition-all duration-700 ${
+                                        isActive ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
+                                    }`}
+                                >
+                                    <h2
+                                        className="font-serif text-2xl sm:text-3xl md:text-5xl lg:text-6xl text-white leading-[1.1] tracking-tight"
+                                        style={{ textShadow: '0 2px 12px rgba(0,0,0,0.5), 0 1px 3px rgba(0,0,0,0.3)' }}
                                     >
-                                        {slide.buttonText || 'SHOP NOW'}
-                                        <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-                                    </Link>
+                                        {slide.title}
+                                    </h2>
+                                    <p
+                                        className="text-white/90 text-xs sm:text-sm md:text-base lg:text-lg font-light tracking-wide max-w-2xl mx-auto leading-relaxed line-clamp-2 sm:line-clamp-none"
+                                        style={{ textShadow: '0 1px 6px rgba(0,0,0,0.4)' }}
+                                    >
+                                        {slide.subtitle}
+                                    </p>
+                                    <div className="pt-1 sm:pt-2 md:pt-4 flex justify-center w-full">
+                                        <Link
+                                            href={slide.link || '/shop'}
+                                            className="inline-flex items-center justify-center gap-2 group/btn px-5 py-2 sm:px-7 sm:py-2.5 md:px-10 md:py-3.5 bg-white text-stone-900 font-bold rounded-full hover:bg-stone-100 hover:scale-105 transition-all shadow-xl text-[11px] sm:text-xs md:text-sm lg:text-base active:scale-95 border border-white/80"
+                                        >
+                                            {slide.buttonText || 'SHOP NOW'}
+                                            <ChevronRight className="w-3 h-3 sm:w-3.5 sm:h-3.5 md:w-4 md:h-4 group-hover/btn:translate-x-1 transition-transform" />
+                                        </Link>
+                                    </div>
                                 </div>
                             </div>
                         </div>
-                    </div>
-                ))}
+                    );
+                })}
             </div>
 
-            {/* Slider Controls */}
             {slideCount > 1 && (
                 <>
-                    {/* Dots Indicator */}
-                    <div className="absolute bottom-6 md:bottom-8 left-1/2 -translate-x-1/2 flex gap-2.5 z-20">
+                    <div className="absolute bottom-2.5 sm:bottom-4 md:bottom-8 left-1/2 -translate-x-1/2 flex gap-1.5 sm:gap-2.5 z-20">
                         {slides.map((_, i) => (
                             <button
                                 key={i}
-                                onClick={() => scrollToIndex(i)}
+                                onClick={() => goToSlide(i)}
                                 aria-label={`Go to slide ${i + 1}`}
-                                className={`transition-all duration-500 rounded-full h-1.5 ${i === current ? 'w-10 bg-white' : 'w-4 bg-white/40 hover:bg-white/60'}`}
+                                className={`transition-all duration-500 rounded-full h-1 sm:h-1.5 ${
+                                    i === current
+                                        ? 'w-6 sm:w-10 bg-white'
+                                        : 'w-3 sm:w-4 bg-white/40 hover:bg-white/60'
+                                }`}
                             />
                         ))}
                     </div>
 
-                    {/* Navigation Arrows */}
                     <button
-                        onClick={() => scrollToIndex((current - 1 + slideCount) % slideCount)}
+                        onClick={() => goToSlide((current - 1 + slideCount) % slideCount)}
                         aria-label="Previous slide"
                         className="absolute left-4 md:left-8 top-1/2 -translate-y-1/2 p-3 rounded-full bg-white/10 text-white hover:bg-white hover:text-stone-900 border border-white/20 transition-all backdrop-blur-md opacity-0 group-hover:opacity-100 hover:scale-110 active:scale-95 hidden md:flex"
                     >
                         <ChevronLeft className="w-5 h-5 md:w-6 md:h-6" />
                     </button>
                     <button
-                        onClick={() => scrollToIndex((current + 1) % slideCount)}
+                        onClick={() => goToSlide((current + 1) % slideCount)}
                         aria-label="Next slide"
                         className="absolute right-4 md:right-8 top-1/2 -translate-y-1/2 p-3 rounded-full bg-white/10 text-white hover:bg-white hover:text-stone-900 border border-white/20 transition-all backdrop-blur-md opacity-0 group-hover:opacity-100 hover:scale-110 active:scale-95 hidden md:flex"
                     >

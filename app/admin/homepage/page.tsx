@@ -238,7 +238,7 @@ export default function HomepageManager() {
                                         <ImageUpload images={slide.image ? [slide.image] : []} onChange={urls => updateHero(i, { image: urls[0] || '' })} maxImages={1} />
                                     </div>
                                     <div>
-                                        <label className="block text-xs font-bold text-stone-400 uppercase mb-2">Mobile Image (4:5 / 9:16)</label>
+                                        <label className="block text-xs font-bold text-stone-400 uppercase mb-2">Mobile Image (16:9, optional)</label>
                                         <ImageUpload images={slide.mobileImage ? [slide.mobileImage] : []} onChange={urls => updateHero(i, { mobileImage: urls[0] || '' })} maxImages={1} />
                                     </div>
                                 </div>

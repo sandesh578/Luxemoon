@@ -102,16 +102,19 @@ async function getOrCreateSiteConfig() {
   }
 }
 
-async function _getSiteConfig() {
+async function _getSiteConfigReadOnly() {
   try {
-    return await getOrCreateSiteConfig();
+    const config = await prisma.siteConfig.findUnique({
+      where: { id: DEFAULT_SITE_CONFIG.id },
+    });
+    return config ?? DEFAULT_SITE_CONFIG;
   } catch {
     return DEFAULT_SITE_CONFIG;
   }
 }
 
 export const getSiteConfig = unstable_cache(
-  async () => _getSiteConfig(),
+  async () => _getSiteConfigReadOnly(),
   ["site-config"],
   { revalidate: 300, tags: ["config"] }
 );
