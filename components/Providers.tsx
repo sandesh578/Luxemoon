@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { DEFAULT_LOCALE, type Locale, LOCALE_COOKIE_NAME, isLocale, translate } from '@/lib/i18n';
 import { calculateDiscountedPrice } from '@/lib/settings';
 
@@ -160,15 +160,15 @@ export const Providers = ({
     if (hydrated) localStorage.setItem('lm_cart', JSON.stringify(items));
   }, [items, hydrated]);
 
-  const toggleLocation = () => setInsideValleyState(prev => !prev);
-  const setInsideValley = (val: boolean) => setInsideValleyState(val);
-  const setLocale = (nextLocale: Locale) => {
+  const toggleLocation = useCallback(() => setInsideValleyState(prev => !prev), []);
+  const setInsideValley = useCallback((val: boolean) => setInsideValleyState(val), []);
+  const setLocale = useCallback((nextLocale: Locale) => {
     setLocaleState(nextLocale);
     document.cookie = `${LOCALE_COOKIE_NAME}=${nextLocale}; path=/; max-age=31536000; samesite=lax`;
     document.documentElement.lang = nextLocale;
-  };
+  }, []);
 
-  const addToCart = (product: Product, quantity: number) => {
+  const addToCart = useCallback((product: Product, quantity: number) => {
     const sanitizedProduct = {
       ...product,
       priceInside: Number(product.priceInside) || 0,
@@ -184,40 +184,79 @@ export const Providers = ({
       return [...prev, { ...sanitizedProduct, quantity }];
     });
     setIsCartOpen(true);
-  };
+  }, []);
 
-  const removeFromCart = (id: string) => setItems(prev => prev.filter(item => item.id !== id));
+  const removeFromCart = useCallback((id: string) => {
+    setItems(prev => prev.filter(item => item.id !== id));
+  }, []);
 
-  const updateQuantity = (id: string, qty: number) => {
+  const updateQuantity = useCallback((id: string, qty: number) => {
     if (qty < 1) return;
     setItems(prev => prev.map(item => item.id === id ? { ...item, quantity: qty } : item));
-  };
+  }, []);
 
-  const clearCart = () => setItems([]);
+  const clearCart = useCallback(() => setItems([]), []);
 
-  const cartTotal = items.reduce((sum, item) => {
-    const price = isInsideValley ? item.priceInside : item.priceOutside;
-    const basePrice = Number(price) || 0;
-    const unitPrice = calculateDiscountedPrice(basePrice, item, config);
-    return sum + (unitPrice * item.quantity);
-  }, 0);
+  const cartTotal = useMemo(() => {
+    return items.reduce((sum, item) => {
+      const price = isInsideValley ? item.priceInside : item.priceOutside;
+      const basePrice = Number(price) || 0;
+      const unitPrice = calculateDiscountedPrice(basePrice, item, config);
+      return sum + (unitPrice * item.quantity);
+    }, 0);
+  }, [items, isInsideValley, config]);
 
-  const deliveryCharge = cartTotal >= config.freeDeliveryThreshold
-    ? 0
-    : (isInsideValley ? config.deliveryChargeInside : config.deliveryChargeOutside);
+  const deliveryCharge = useMemo(() => (
+    cartTotal >= config.freeDeliveryThreshold
+      ? 0
+      : (isInsideValley ? config.deliveryChargeInside : config.deliveryChargeOutside)
+  ), [cartTotal, config.freeDeliveryThreshold, config.deliveryChargeInside, config.deliveryChargeOutside, isInsideValley]);
 
-  const finalTotal = cartTotal + deliveryCharge;
-  const t = (key: string, vars?: Record<string, string | number>) => translate(locale, key, vars);
+  const finalTotal = useMemo(() => cartTotal + deliveryCharge, [cartTotal, deliveryCharge]);
+  const t = useCallback((key: string, vars?: Record<string, string | number>) => translate(locale, key, vars), [locale]);
 
   useEffect(() => {
     document.documentElement.lang = locale;
   }, [locale]);
 
+  const configValue = useMemo(() => ({ config }), [config]);
+  const i18nValue = useMemo(() => ({ locale, setLocale, t }), [locale, setLocale, t]);
+  const locationValue = useMemo(
+    () => ({ isInsideValley, toggleLocation, setInsideValley }),
+    [isInsideValley, toggleLocation, setInsideValley]
+  );
+  const cartValue = useMemo(
+    () => ({
+      items,
+      addToCart,
+      removeFromCart,
+      updateQuantity,
+      clearCart,
+      cartTotal,
+      deliveryCharge,
+      finalTotal,
+      isCartOpen,
+      setIsCartOpen,
+    }),
+    [
+      items,
+      addToCart,
+      removeFromCart,
+      updateQuantity,
+      clearCart,
+      cartTotal,
+      deliveryCharge,
+      finalTotal,
+      isCartOpen,
+      setIsCartOpen,
+    ]
+  );
+
   return (
-    <ConfigContext.Provider value={{ config }}>
-      <I18nContext.Provider value={{ locale, setLocale, t }}>
-        <LocationContext.Provider value={{ isInsideValley, toggleLocation, setInsideValley }}>
-          <CartContext.Provider value={{ items, addToCart, removeFromCart, updateQuantity, clearCart, cartTotal, deliveryCharge, finalTotal, isCartOpen, setIsCartOpen }}>
+    <ConfigContext.Provider value={configValue}>
+      <I18nContext.Provider value={i18nValue}>
+        <LocationContext.Provider value={locationValue}>
+          <CartContext.Provider value={cartValue}>
             {children}
           </CartContext.Provider>
         </LocationContext.Provider>

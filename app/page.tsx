@@ -20,7 +20,7 @@ const QuickAddButton = dynamic(() => import('@/components/QuickAddButton').then(
 
 const getCachedHomepageData = unstable_cache(
   async () => {
-    // getSiteConfig handles its own internal upsert/catch
+    // Site config fetch is read-only on public paths.
     const config = await getSiteConfig();
 
     const [
@@ -29,7 +29,6 @@ const getCachedHomepageData = unstable_cache(
       newArrivalsRaw,
       manualBestSellersRaw,
       nanoplastiaProductsRaw,
-      allActiveProductsRaw,
     ] = await Promise.all([
       prisma.homepageContent.findUnique({ where: { id: 1 } }),
       prisma.product.findMany({
@@ -71,12 +70,6 @@ const getCachedHomepageData = unstable_cache(
         take: 3,
         orderBy: { createdAt: 'asc' },
       }),
-      prisma.product.findMany({
-        where: { isActive: true, isArchived: false, isDraft: false },
-        select: {
-          id: true, slug: true, name: true, images: true, priceInside: true, originalPrice: true, discountPercent: true, discountFixed: true, discountStart: true, discountEnd: true
-        }
-      }),
     ]);
 
     const sanitizeProducts = (products: any[]) => (products || []).filter(Boolean).map(p => {
@@ -95,8 +88,28 @@ const getCachedHomepageData = unstable_cache(
         };
     }).filter(Boolean);
 
-    const productById = new Map(allActiveProductsRaw.map((product) => [product.id, product]));
     const communityReviewsRaw = Array.isArray((content as any)?.communityReviews) ? (content as any).communityReviews : [];
+    const communityProductIds: string[] = Array.from(
+      new Set(
+        communityReviewsRaw
+          .map((review: any) => review?.productId)
+          .filter((productId: unknown): productId is string => typeof productId === 'string' && productId.length > 0)
+      )
+    );
+    const communityProductsRaw = communityProductIds.length > 0
+      ? await prisma.product.findMany({
+          where: {
+            id: { in: communityProductIds },
+            isActive: true,
+            isArchived: false,
+            isDraft: false,
+          },
+          select: {
+            id: true, slug: true, name: true, images: true, priceInside: true, originalPrice: true, discountPercent: true, discountFixed: true, discountStart: true, discountEnd: true
+          }
+        })
+      : [];
+    const productById = new Map(communityProductsRaw.map((product) => [product.id, product]));
     
     const fullCommunityReviews = communityReviewsRaw.map((r: any) => {
        if (!r.productId) return r;
@@ -158,7 +171,8 @@ const getCachedHomepageData = unstable_cache(
         sanitizeProducts(newArrivalsRaw),
         sanitizeProducts(bestSellersRaw),
         sanitizeProducts(nanoplastiaProductsRaw),
-        fullCommunityReviews
+        fullCommunityReviews,
+        config.currencyCode,
     ] as const;
   },
   ['home-page-data-v2'], // Bumped cache key
@@ -169,11 +183,10 @@ export default async function Home() {
   const locale = await getLocaleServer();
   const t = (key: string, vars?: Record<string, string | number>) => translate(locale, key, vars);
   
-  const config = await getSiteConfig();
   const homeData = await getCachedHomepageData();
   
-  const [content, featuredProducts, newArrivals, bestSellers, nanoplastiaProducts, communityReviews] = homeData;
-  const currencyCode = (config?.currencyCode as any) === 'NPR' ? 'NPR' : 'USD';
+  const [content, featuredProducts, newArrivals, bestSellers, nanoplastiaProducts, communityReviews, cachedCurrencyCode] = homeData;
+  const currencyCode = cachedCurrencyCode === 'NPR' ? 'NPR' : 'USD';
   const formatPrice = (amount: number) => formatCurrency(amount, currencyCode);
 
   const nanoplastiaOrder = ['anti-hair-fall-shampoo', 'shining-silk-hair-mask', 'soft-silky-serum'];

@@ -84,12 +84,12 @@ export default async function RootLayout({
   };
 
   return (
-    <html lang={DEFAULT_LOCALE}>
+    <html lang={DEFAULT_LOCALE} suppressHydrationWarning>
       <head>
         <link rel="preconnect" href="https://res.cloudinary.com" crossOrigin="" />
         <link rel="preconnect" href="https://nominatim.openstreetmap.org" crossOrigin="" />
       </head>
-      <body className={`${playfair.variable} ${lato.variable} font-sans bg-[#F6EFE7] text-[#5C3A21]`}>
+      <body className={`${playfair.variable} ${lato.variable} font-sans bg-[#F6EFE7] text-[#5C3A21]`} suppressHydrationWarning>
         <Providers config={config} initialLocale={DEFAULT_LOCALE}>
           <Navbar />
           <main className="min-h-screen">

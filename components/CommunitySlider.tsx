@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useRef, useEffect, useState, useCallback, useMemo, useLayoutEffect } from 'react';
+import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -46,8 +46,7 @@ function CommunityVideoCard({
       const playPromise = videoRef.current.play();
       if (playPromise !== undefined) {
         playPromise.catch(() => {
-          // Autoplay was prevented, we handle this by remaining paused
-          console.log("Playback interrupted or blocked by browser policy");
+          // Autoplay may be blocked by browser policy; ignore silently.
         });
       }
     } else {
@@ -86,7 +85,7 @@ function CommunityVideoCard({
               ref={videoRef}
               src={review.mediaUrl || ''} 
               className="w-full h-full object-cover" 
-              preload="auto" 
+              preload="metadata" 
               loop 
               muted={isMuted} 
               playsInline 
@@ -150,6 +149,7 @@ function CommunityVideoCard({
     </div>
   );
 }
+const MemoizedCommunityVideoCard = React.memo(CommunityVideoCard);
 
 export function CommunitySlider({ 
   reviews, 
@@ -165,6 +165,19 @@ export function CommunitySlider({
   const [activeIndex, setActiveIndex] = useState(0);
   const [viewportWidth, setViewportWidth] = useState(0);
 
+  const normalizedReviews = useMemo(
+    () =>
+      reviews
+        .filter(Boolean)
+        .map((review) => ({
+          ...review,
+          product: review.product
+            ? { ...review.product, id: (review as any).productId || (review.product as any).id }
+            : undefined,
+        })),
+    [reviews]
+  );
+
   const CARD_WIDTH = isMobile ? 280 : 320;
   const GAP = isMobile ? 24 : 64;
 
@@ -174,17 +187,25 @@ export function CommunitySlider({
       setViewportWidth(window.innerWidth);
     };
     handleResize();
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
+    let resizeTimer: ReturnType<typeof setTimeout>;
+    const throttledResize = () => {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(handleResize, 150);
+    };
+    window.addEventListener('resize', throttledResize);
+    return () => {
+      window.removeEventListener('resize', throttledResize);
+      clearTimeout(resizeTimer);
+    };
   }, []);
 
   const shouldCenterGroup = useMemo(() => {
     if (!viewportWidth) return false;
-    const totalContentWidth = (reviews.length * CARD_WIDTH) + ((reviews.length - 1) * GAP);
+    const totalContentWidth = (normalizedReviews.length * CARD_WIDTH) + ((normalizedReviews.length - 1) * GAP);
     return totalContentWidth < (viewportWidth - 48);
-  }, [reviews.length, CARD_WIDTH, GAP, viewportWidth]);
+  }, [normalizedReviews.length, CARD_WIDTH, GAP, viewportWidth]);
 
-  useLayoutEffect(() => {
+  useEffect(() => {
     if (scrollRef.current && !shouldCenterGroup) {
       scrollRef.current.scrollLeft = 0;
     }
@@ -215,7 +236,8 @@ export function CommunitySlider({
       (entries) => {
         entries.forEach((entry) => {
           if (entry.isIntersecting) {
-            setActiveIndex(Number((entry.target as HTMLElement).dataset.index));
+            const nextIndex = Number((entry.target as HTMLElement).dataset.index);
+            setActiveIndex((prev) => (prev === nextIndex ? prev : nextIndex));
           }
         });
       },
@@ -228,7 +250,7 @@ export function CommunitySlider({
 
     scrollRef.current.querySelectorAll('[data-card]').forEach(c => observer.observe(c));
     return () => observer.disconnect();
-  }, [reviews, shouldCenterGroup]);
+  }, [normalizedReviews, shouldCenterGroup]);
 
   const scroll = (dir: 'left' | 'right') => {
     if (!scrollRef.current) return;
@@ -272,10 +294,10 @@ export function CommunitySlider({
             paddingRight: shouldCenterGroup ? '24px' : `calc(50vw - ${CARD_WIDTH / 2}px)`
           }}
         >
-          {reviews.filter(Boolean).map((review, i) => (
+          {normalizedReviews.map((review, i) => (
             <div key={i} data-index={i} data-card className="snap-center">
-              <CommunityVideoCard 
-                review={{...review, product: review.product ? {...review.product, id: (review as any).productId || (review.product as any).id} : undefined} as any}
+              <MemoizedCommunityVideoCard 
+                review={review as any}
                 isActive={activeIndex === i}
                 currencyCode={currencyCode}
               />
