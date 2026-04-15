@@ -21,6 +21,10 @@ const nextConfig: NextConfig = {
     dangerouslyAllowSVG: true,
     contentDispositionType: 'attachment',
     contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;",
+    localPatterns: [
+      { pathname: '/**' },
+    ],
+    qualities: [60, 75, 85],
     remotePatterns: [
       { hostname: "images.unsplash.com" },
       { hostname: "placehold.co" },
