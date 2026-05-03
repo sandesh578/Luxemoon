@@ -7,8 +7,8 @@ const nextConfig: NextConfig = {
   reactStrictMode: true,
   output: "standalone",
   outputFileTracingIncludes: {
-    '/*': ['./node_modules/@prisma/client/**/*', './node_modules/.prisma/client/**/*'],
-    '/api/**/*': ['./node_modules/@prisma/client/**/*', './node_modules/.prisma/client/**/*'],
+    '/*': ['./node_modules/@prisma/client/**/*', './node_modules/.prisma/client/**/*', './prisma/schema.prisma'],
+    '/api/**/*': ['./node_modules/@prisma/client/**/*', './node_modules/.prisma/client/**/*', './prisma/schema.prisma'],
   },
   experimental: {
     staticGenerationMaxConcurrency: 1,

@@ -5,17 +5,17 @@ frontend:
       commands:
         - nvm install 20
         - nvm use 20
-        - npm install
+        - node -v
+        - npm ci
         - npx prisma generate
     build:
       commands:
-        - env | grep -e DATABASE_URL -e NEXT_PUBLIC_ -e NEXTAUTH_ -e CLOUDINARY_ -e STRIPE_ -e ADMIN_ >> .env.production
         - npm run build
   artifacts:
     baseDirectory: .next
     files:
-      - "**/*"
+      - '**/*'
   cache:
     paths:
-      - node_modules/**/*
-      - .next/cache/**/*
+      - 'node_modules/**/*'
+      - '.next/cache/**/*'

@@ -43,3 +43,9 @@ prisma/migrations/**/migration_lock.toml
 .vercel
 
 .tmp
+
+# AWS Amplify
+amplify/#current-cloud-backend
+amplify/backend/amplify-meta.json
+aws-exports.js
+aws-exports.ts
