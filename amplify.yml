@@ -6,7 +6,8 @@ frontend:
         - nvm install 20
         - nvm use 20
         - node -v
-        - npm ci
+        - npm -v
+        - npm install
         - npx prisma generate
     build:
       commands:
