@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import { updateSiteConfig } from '../actions';
 import { Loader2, Save } from 'lucide-react';
@@ -28,6 +28,8 @@ export default function SettingsClient({ initialData }: { initialData: Record<st
   const [saving, setSaving] = useState(false);
   const [tab, setTab] = useState('brand');
   const [formData, setFormData] = useState<Record<string, unknown>>(initialData);
+  // Track which tabs have been visited so their content stays mounted (avoids RichTextEditor re-init)
+  const visitedTabs = useRef<Set<string>>(new Set(['brand']));
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -49,14 +51,14 @@ export default function SettingsClient({ initialData }: { initialData: Record<st
 
       <div className="flex gap-1 bg-stone-100 p-1 rounded-xl mb-6 overflow-x-auto">
         {TABS.map(t => (
-          <button key={t.id} onClick={() => setTab(t.id)} className={`px-4 py-2 text-sm font-bold rounded-lg whitespace-nowrap transition-colors ${tab === t.id ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500 hover:text-stone-700'}`}>
+          <button key={t.id} onClick={() => { visitedTabs.current.add(t.id); setTab(t.id); }} className={`px-4 py-2 text-sm font-bold rounded-lg whitespace-nowrap transition-colors ${tab === t.id ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500 hover:text-stone-700'}`}>
             {t.label}
           </button>
         ))}
       </div>
 
       <form onSubmit={handleSubmit} className="bg-white p-8 rounded-xl shadow-sm border border-stone-200 space-y-6">
-        {tab === 'brand' && (
+        {visitedTabs.current.has('brand') && <div className={tab === 'brand' ? 'block' : 'hidden'}>
           <div className="space-y-6">
             <Field label="Store Name" value={String(formData.storeName || '')} onChange={v => set('storeName', v)} />
             <Field label="Banner Text" value={String(formData.bannerText || '')} onChange={v => set('bannerText', v)} />
@@ -97,9 +99,9 @@ export default function SettingsClient({ initialData }: { initialData: Record<st
               </p>
             </div>
           </div>
-        )}
+        </div>}
 
-        {tab === 'seo' && (
+        {visitedTabs.current.has('seo') && <div className={tab === 'seo' ? 'block' : 'hidden'}>
           <div className="space-y-4">
             <Field label="Meta Title" value={String(formData.metaTitle || '')} onChange={v => set('metaTitle', v)} placeholder="e.g. Luxe Moon | Premium Korean Cosmetics" />
             <div>
@@ -107,9 +109,9 @@ export default function SettingsClient({ initialData }: { initialData: Record<st
               <textarea className="w-full p-2 border rounded-lg" rows={3} value={String(formData.metaDescription || '')} onChange={e => set('metaDescription', e.target.value)} placeholder="Brief description for search engines..." />
             </div>
           </div>
-        )}
+        </div>}
 
-        {tab === 'contact' && (
+        {visitedTabs.current.has('contact') && <div className={tab === 'contact' ? 'block' : 'hidden'}>
           <div className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <Field label="Phone" value={String(formData.contactPhone || '')} onChange={v => set('contactPhone', v)} />
@@ -121,9 +123,9 @@ export default function SettingsClient({ initialData }: { initialData: Record<st
               <Field label="TikTok URL" value={String(formData.tiktokUrl || '')} onChange={v => set('tiktokUrl', v)} placeholder="https://tiktok.com/@..." />
             </div>
           </div>
-        )}
+        </div>}
 
-        {tab === 'delivery' && (
+        {visitedTabs.current.has('delivery') && <div className={tab === 'delivery' ? 'block' : 'hidden'}>
           <div className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <NumberField label="Charge (Inside Valley)" value={Number(formData.deliveryChargeInside ?? 0)} onChange={v => set('deliveryChargeInside', v)} />
@@ -155,9 +157,9 @@ export default function SettingsClient({ initialData }: { initialData: Record<st
 
             <ToggleField label="Allow Discount Stacking" checked={Boolean(formData.allowStacking)} onChange={v => set('allowStacking', v)} description="If enabled, global discount can stack on product-level discount." />
           </div>
-        )}
+        </div>}
 
-        {tab === 'content' && (
+        {visitedTabs.current.has('content') && <div className={tab === 'content' ? 'block' : 'hidden'}>
           <div className="space-y-6">
             <div>
               <label className="block text-sm font-bold text-stone-600 mb-1">Footer Content</label>
@@ -172,7 +174,7 @@ export default function SettingsClient({ initialData }: { initialData: Record<st
               <RichTextEditor content={String(formData.privacyPolicy || '')} onChange={v => set('privacyPolicy', v)} placeholder="Your privacy policy text..." />
             </div>
             <div>
-              <label className="block text-sm font-bold text-stone-600 mb-1">Terms & Conditions</label>
+              <label className="block text-sm font-bold text-stone-600 mb-1">Terms &amp; Conditions</label>
               <RichTextEditor content={String(formData.termsConditions || '')} onChange={v => set('termsConditions', v)} placeholder="Your terms and conditions..." />
             </div>
             <div>
@@ -184,14 +186,14 @@ export default function SettingsClient({ initialData }: { initialData: Record<st
               <RichTextEditor content={String(formData.refundPolicy || '')} onChange={v => set('refundPolicy', v)} placeholder="Your refund policy..." />
             </div>
           </div>
-        )}
+        </div>}
 
-        {tab === 'notifications' && (
+        {visitedTabs.current.has('notifications') && <div className={tab === 'notifications' ? 'block' : 'hidden'}>
           <div className="space-y-4">
             <ToggleField label="Email Notifications" checked={Boolean(formData.emailNotificationsEnabled)} onChange={v => set('emailNotificationsEnabled', v)} description="Send email notifications for order status changes (requires RESEND_API_KEY)" />
             <ToggleField label="SMS Notifications" checked={Boolean(formData.smsNotificationsEnabled)} onChange={v => set('smsNotificationsEnabled', v)} description="Send SMS notifications via Sparrow SMS (requires SPARROW_SMS_TOKEN)" />
           </div>
-        )}
+        </div>}
 
         <button disabled={saving} className="px-6 py-3 bg-stone-900 text-white font-bold rounded-xl flex items-center gap-2 hover:bg-stone-800 disabled:opacity-50">
           {saving ? <Loader2 className="animate-spin w-4 h-4" /> : <Save className="w-4 h-4" />}

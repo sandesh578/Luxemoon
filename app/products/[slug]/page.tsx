@@ -83,7 +83,7 @@ const getProduct = unstable_cache(
         discountEnd: data.discountEnd?.toISOString() || null,
     };
   },
-  ['product-detail-slug'],
+  ['product-detail', 'by-slug'],
   { tags: ['products', 'reviews', 'transformations'], revalidate: 300 }
 );
 
@@ -131,7 +131,7 @@ const getRelatedProducts = unstable_cache(
         originalPrice: r.originalPrice ? Number(r.originalPrice) : null,
     }));
   },
-  ['related-products-by-cat'],
+  ['related-products', 'by-cat'],
   { tags: ['products'], revalidate: 300 }
 );
 

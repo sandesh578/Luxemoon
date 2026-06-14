@@ -77,11 +77,9 @@ export async function POST(req: Request) {
                 productId: data.productId,
                 images: data.images,
                 video: data.video,
-                approved: false, // Reviews should be approved by admin
+                approved: false, // Reviews require admin approval
                 ipAddress: ip,
-                // TEMPORARY: Disabled due to missing DB columns
-                // isVerified: isVerified,
-                // verifiedPurchase: isVerified,
+                verifiedPurchase: !!deliveredOrder, // Set based on actual purchase history
             },
         });
 

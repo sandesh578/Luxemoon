@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, use } from 'react';
 import dynamic from 'next/dynamic';
-import { updateProduct, deleteProduct } from '../../actions';
+import { updateProduct, deleteProduct, getProductsForDropdown } from '../../actions';
 import { useRouter } from 'next/navigation';
 import { Loader2, X, ArrowLeft, ListPlus, HelpCircle, Image as ImageIcon } from 'lucide-react';
 import { ImageUpload } from '@/components/admin/ImageUpload';
@@ -77,18 +77,18 @@ export default function EditProduct({ params }: { params: Promise<{ id: string }
         setLoadError(null);
         const [catResp, listResp, productResp] = await Promise.all([
           fetch('/api/categories'),
-          fetch('/api/products'),
+          getProductsForDropdown(),
           fetch(`/api/products/${resolvedParams.id}`),
         ]);
 
-        const [catRes, prodRes, productRes] = await Promise.all([
+        const [catRes, productRes] = await Promise.all([
           catResp.json(),
-          listResp.json(),
           productResp.json(),
         ]);
+        const prodRes = listResp;
 
         if (!catResp.ok || !Array.isArray(catRes)) throw new Error('Failed to load categories');
-        if (!listResp.ok || !Array.isArray(prodRes)) throw new Error('Failed to load products');
+        if (!Array.isArray(prodRes)) throw new Error('Failed to load products');
 
         setCategories(catRes);
         setProducts(prodRes);

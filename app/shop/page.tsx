@@ -55,7 +55,7 @@ const getCachedShopData = unstable_cache(
 
     return [products, categories] as const;
   },
-  ['shop-page-data'],
+  ['shop-page-data', 'by-sort-filter'],
   { tags: ['products', 'categories'], revalidate: 300 }
 );
 

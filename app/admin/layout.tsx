@@ -32,7 +32,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   );
 
   return (
-    <div className="min-h-[100dvh] bg-stone-100 flex flex-col md:flex-row overflow-x-hidden w-full max-w-[100vw]">
+    <div className="min-h-screen bg-stone-100 flex flex-col md:flex-row w-full">
       {/* Mobile Top Bar */}
       <div className="md:hidden bg-stone-900 text-white p-4 flex items-center justify-between sticky top-0 z-[60] w-full">
         <div className="font-serif text-lg font-bold tracking-widest text-[#F6EFE7]">ADMIN PANEL</div>
@@ -52,7 +52,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <nav className="space-y-2 flex-1 overflow-y-auto pr-2 no-scrollbar">
+            <nav className="space-y-2 flex-1 pr-2 no-scrollbar">
               <NavLinks />
             </nav>
             <Link href="/" className="flex items-center gap-3 text-stone-500 hover:text-white transition-colors p-3 mt-4 border-t border-stone-800 pt-4">
@@ -64,9 +64,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       )}
 
       {/* Desktop Sidebar */}
-      <aside className="w-64 bg-stone-900 text-stone-400 p-6 hidden md:flex flex-col sticky top-0 h-screen">
+      <aside className="w-64 bg-stone-900 text-stone-400 p-6 hidden md:flex flex-col flex-shrink-0 h-screen sticky top-0 overflow-y-auto">
         <div className="font-serif text-white text-xl font-bold mb-10 tracking-widest">LUXE MOON</div>
-        <nav className="space-y-2 flex-1 overflow-y-auto">
+        <nav className="space-y-2 flex-1">
           <NavLinks />
         </nav>
         <Link href="/" className="flex items-center gap-3 text-stone-500 hover:text-white transition-colors p-3">
@@ -75,7 +75,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         </Link>
       </aside>
 
-      <main className="flex-1 p-4 md:p-8 overflow-y-auto w-full">
+      <main className="flex-1 p-4 md:p-8 overflow-y-auto min-w-0 min-h-screen">
         <div className="max-w-7xl mx-auto">
           {children}
         </div>

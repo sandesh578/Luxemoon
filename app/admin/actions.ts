@@ -422,6 +422,7 @@ export async function updateProduct(id: string, data: Record<string, unknown>): 
   revalidatePath('/admin/products');
   revalidatePath('/shop');
   revalidatePath('/');
+  revalidatePath('/products/[slug]', 'page');
   return { success: true };
 }
 
@@ -679,25 +680,16 @@ export async function getProductsForDropdown() {
 export async function resendNotification(orderId: string, type: 'SMS' | 'EMAIL'): Promise<{ success: boolean; error?: string }> {
   await verifyAdmin();
   try {
-    if (type === 'SMS') {
-      await prisma.notificationLog.create({
-        data: {
-          orderId,
-          type: 'SMS',
-          status: 'SUCCESS',
-          sentAt: new Date(),
-        }
-      });
-    } else {
-      await prisma.notificationLog.create({
-        data: {
-          orderId,
-          type: 'EMAIL',
-          status: 'SUCCESS',
-          sentAt: new Date(),
-        }
-      });
-    }
+    // Note: This creates a manual audit log entry only.
+    // Actual SMS/Email resending requires integration with the notification provider.
+    await prisma.notificationLog.create({
+      data: {
+        orderId,
+        type,
+        status: 'MANUAL_LOG',
+        sentAt: new Date(),
+      }
+    });
 
     revalidatePath('/admin');
     return { success: true };
@@ -716,20 +708,24 @@ export async function createAdminOrder(data: any): Promise<{ success: boolean; i
     const orderItemsData: any[] = [];
     let subtotal = 0;
 
-      for (const item of data.items) {
-        const product = await prisma.product.findUnique({ where: { id: item.productId } });
-        if (!product) throw new Error(`Product not found: ${item.productId}`);
+    const productIds = data.items.map((item: any) => item.productId);
+    const products = await prisma.product.findMany({ where: { id: { in: productIds } } });
+    const productMap = new Map(products.map(p => [p.id, p]));
 
-        const normalized = normalizeProductPrices(product);
-        const unitPrice = data.isInsideValley ? normalized.priceInside : normalized.priceOutside;
-        subtotal = roundTwoDecimals(subtotal + unitPrice * item.quantity);
+    for (const item of data.items) {
+      const product = productMap.get(item.productId);
+      if (!product) throw new Error(`Product not found: ${item.productId}`);
 
-        orderItemsData.push({
-          productId: item.productId,
-          quantity: item.quantity,
-          price: unitPrice
-        });
-      }
+      const normalized = normalizeProductPrices(product);
+      const unitPrice = data.isInsideValley ? normalized.priceInside : normalized.priceOutside;
+      subtotal = roundTwoDecimals(subtotal + unitPrice * item.quantity);
+
+      orderItemsData.push({
+        productId: item.productId,
+        quantity: item.quantity,
+        price: unitPrice
+      });
+    }
 
     let couponDiscountAmount = 0;
     let appliedCoupon: any = null;

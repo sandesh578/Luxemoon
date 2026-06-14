@@ -108,10 +108,12 @@ model Product {
   @@index([categoryId])
   @@index([isFeatured])
   @@index([isNew])
+  @@index([isBestSeller])
   @@index([isDeleted])
   @@index([isActive])
   @@index([isArchived])
   @@index([isActive, isArchived, isDraft, createdAt])
+  @@index([isActive, isArchived, isDraft, isFeatured, createdAt])
   @@index([categoryId, isActive, isArchived, isDraft, stock])
   @@index([name])
 }
@@ -204,6 +206,7 @@ model Order {
   @@index([status, createdAt])
   @@index([customerName])
   @@index([userId])
+  @@index([ipAddress, createdAt])
 }
 
 model OrderItem {

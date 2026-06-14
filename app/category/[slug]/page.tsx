@@ -23,7 +23,7 @@ export default async function CategoryPage({ params }: { params: Promise<{ slug:
             description: true,
             image: true,
             products: {
-                where: { isDeleted: false },
+                where: { isActive: true, isArchived: false, isDraft: false },
                 select: {
                     id: true,
                     slug: true,

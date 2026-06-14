@@ -103,22 +103,27 @@ export async function POST(req: Request) {
         }
       >();
 
+      const productIds = data.items.map(item => item.productId);
+      const products = await tx.product.findMany({
+        where: { id: { in: productIds } },
+        select: {
+          id: true,
+          name: true,
+          priceInside: true,
+          priceOutside: true,
+          discountPercent: true,
+          discountFixed: true,
+          discountStart: true,
+          discountEnd: true,
+          isBundle: true,
+          bundleItemIds: true,
+        },
+      });
+
+      const productMap = new Map(products.map(p => [p.id, p]));
+
       for (const item of data.items) {
-        const product = await tx.product.findUnique({
-          where: { id: item.productId },
-          select: {
-            id: true,
-            name: true,
-            priceInside: true,
-            priceOutside: true,
-            discountPercent: true,
-            discountFixed: true,
-            discountStart: true,
-            discountEnd: true,
-            isBundle: true,
-            bundleItemIds: true,
-          },
-        });
+        const product = productMap.get(item.productId);
         if (!product) throw new Error(`Product not found: ${item.productId}`);
 
         const priceInsideValue = decimalToNumber(product.priceInside);

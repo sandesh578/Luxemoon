@@ -25,7 +25,7 @@ export default async function AdminProducts({ searchParams }: { searchParams: Pr
   }
   if (category) where.categoryId = category;
 
-  const [products, total] = await Promise.all([
+  const [products, total, categories] = await Promise.all([
     prisma.product.findMany({
       where,
       select: {
@@ -49,6 +49,11 @@ export default async function AdminProducts({ searchParams }: { searchParams: Pr
       priceInside: Number(p.priceInside)
     }))),
     prisma.product.count({ where }),
+    prisma.category.findMany({
+      where: { isArchived: false, isActive: true },
+      select: { id: true, name: true },
+      orderBy: { name: 'asc' }
+    })
   ]);
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
@@ -70,10 +75,10 @@ export default async function AdminProducts({ searchParams }: { searchParams: Pr
             <input name="search" defaultValue={search} placeholder="Search products..."
               className="w-full pl-9 pr-4 py-2 text-sm border border-stone-200 rounded-lg" />
           </div>
-          <select name="category" defaultValue={category} className="p-2 text-sm border border-stone-200 rounded-lg">
+          <select name="category" defaultValue={category} className="p-2 text-sm border border-stone-200 rounded-lg bg-white">
             <option value="">All Categories</option>
-            {['Shampoo', 'Treatment', 'Serum', 'Kits', 'Accessories', 'Conditioner', 'Hair Oil', 'Hair Mask'].map(c => (
-              <option key={c} value={c}>{c}</option>
+            {categories.map(c => (
+              <option key={c.id} value={c.id}>{c.name}</option>
             ))}
           </select>
           <button className="px-4 py-2 bg-stone-100 text-sm font-bold rounded-lg">Filter</button>
