@@ -11,6 +11,14 @@ import dynamic from 'next/dynamic';
 import { formatCurrency } from '@/lib/currency';
 import { ProfileDropdown } from './ProfileDropdown';
 import { useRouter } from 'next/navigation';
+import {
+  clearCachedSession,
+  emitSessionChanged,
+  readCachedSession,
+  SESSION_CHANGED_EVENT,
+  type SessionState,
+  writeCachedSession,
+} from '@/lib/session-client';
 
 const CartDrawer = dynamic(
   () => import('./CartDrawer').then((mod) => mod.CartDrawer),
@@ -20,15 +28,6 @@ const MobileMenuDrawer = dynamic(
   () => import('./MobileMenuDrawer').then((mod) => mod.MobileMenuDrawer),
   { ssr: false }
 );
-
-type SessionState = {
-  authenticated: boolean;
-  user?: {
-    userId?: string;
-    email?: string;
-    name?: string;
-  };
-};
 
 export const Navbar = () => {
   const { items, setIsCartOpen, cartTotal } = useCart();
@@ -44,12 +43,24 @@ export const Navbar = () => {
   const itemCount = items.reduce((acc, item) => acc + item.quantity, 0);
 
   const fetchSession = useCallback(async () => {
+    const cachedSession = readCachedSession();
+    if (cachedSession) {
+      setSession(cachedSession);
+      return cachedSession;
+    }
+
     try {
       const response = await fetch('/api/auth/session', { cache: 'no-store' });
       const data = (await response.json()) as SessionState;
-      setSession(data?.authenticated ? data : { authenticated: false });
+      const nextSession = data?.authenticated ? data : { authenticated: false };
+      setSession(nextSession);
+      writeCachedSession(nextSession);
+      return nextSession;
     } catch {
-      setSession({ authenticated: false });
+      const nextSession = { authenticated: false };
+      setSession(nextSession);
+      clearCachedSession();
+      return nextSession;
     }
   }, []);
 
@@ -60,8 +71,18 @@ export const Navbar = () => {
   useEffect(() => {
     setMobileOpen(false);
     setProfileOpen(false);
-    fetchSession();
-  }, [pathname, fetchSession]);
+  }, [pathname]);
+
+  useEffect(() => {
+    const handleSessionChanged = (event: Event) => {
+      const nextSession = (event as CustomEvent<SessionState>).detail;
+      setSession(nextSession);
+      writeCachedSession(nextSession);
+    };
+
+    window.addEventListener(SESSION_CHANGED_EVENT, handleSessionChanged);
+    return () => window.removeEventListener(SESSION_CHANGED_EVENT, handleSessionChanged);
+  }, []);
 
   useEffect(() => {
     const media = window.matchMedia('(max-width: 767px)');
@@ -103,6 +124,10 @@ export const Navbar = () => {
     try {
       await fetch('/api/auth/logout', { method: 'POST' });
     } finally {
+      const nextSession = { authenticated: false };
+      clearCachedSession();
+      emitSessionChanged(nextSession);
+      setSession(nextSession);
       setMobileOpen(false);
       router.push('/');
       router.refresh();

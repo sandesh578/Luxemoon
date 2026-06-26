@@ -8,52 +8,54 @@ import { SortDropdown } from './SortDropdown';
 import { translate } from '@/lib/i18n';
 import { getLocaleServer } from '@/lib/i18n-server';
 import { formatCurrency } from '@/lib/currency';
-import { calculateDiscountedPrice } from '@/lib/settings';
 import { getSiteConfig } from '@/lib/settings-server';
+import {
+  serializeStorefrontProduct,
+  storefrontProductSelect,
+  type StorefrontProductRecord,
+  visibleStorefrontProductWhere,
+} from '@/lib/storefront-products';
 
 export const revalidate = 60;
 
 const getCachedShopData = unstable_cache(
   async (sortParam: string, filterParam: string) => {
     let orderBy: any = [{ isFeatured: 'desc' }, { createdAt: 'desc' }];
-    let where: any = { isActive: true, isArchived: false, isDraft: false };
+    const where: Record<string, unknown> = { ...visibleStorefrontProductWhere };
 
     if (sortParam === 'price_asc') orderBy = { priceInside: 'asc' };
     else if (sortParam === 'price_desc') orderBy = { priceInside: 'desc' };
     else if (sortParam === 'newest') orderBy = { createdAt: 'desc' };
-    else if (sortParam === 'bestselling') orderBy = { orderItems: { _count: 'desc' } };
+    else if (sortParam === 'bestselling') orderBy = [{ totalOrdersCount: 'desc' }, { createdAt: 'desc' }] as any;
 
     if (filterParam === 'featured') {
       where.isFeatured = true;
     } else if (filterParam === 'new') {
       where.isNew = true;
     } else if (filterParam === 'bestsellers') {
-      orderBy = { orderItems: { _count: 'desc' } };
+      orderBy = [{ totalOrdersCount: 'desc' }, { createdAt: 'desc' }] as any;
     }
 
     const [config, productsRaw, categories] = await Promise.all([
       getSiteConfig(),
       prisma.product.findMany({
         where,
-        select: {
-          id: true, slug: true, name: true, images: true, priceInside: true, originalPrice: true, isFeatured: true, isNew: true, stock: true,
-          discountPercent: true, discountFixed: true, discountStart: true, discountEnd: true
-        },
+        select: storefrontProductSelect as any,
         orderBy,
-      }),
+      }) as unknown as Promise<StorefrontProductRecord[]>,
       prisma.category.findMany({
         select: { id: true, slug: true, name: true },
         orderBy: { name: 'asc' },
       }),
     ]);
 
-    const products = productsRaw.map(p => ({
-        ...p,
-        priceInside: calculateDiscountedPrice(Number(p.priceInside), p as any, config as any),
-        originalPrice: p.originalPrice ? Number(p.originalPrice) : null,
-    }));
+    const products = productsRaw.map((product) => serializeStorefrontProduct(product, config));
 
-    return [products, categories] as const;
+    return {
+      products,
+      categories,
+      currencyCode: config.currencyCode,
+    } as const;
   },
   ['shop-page-data', 'by-sort-filter'],
   { tags: ['products', 'categories'], revalidate: 300 }
@@ -80,11 +82,8 @@ export default async function ShopPage({ searchParams }: { searchParams: Promise
     pageSubtitle = t('shopPage.bestSubtitle');
   }
 
-  const [[products, categories], config] = await Promise.all([
-    getCachedShopData(sortParam, filterParam),
-    getSiteConfig(),
-  ]);
-  const currencyCode = config.currencyCode === 'NPR' ? 'NPR' : 'USD';
+  const { products, categories, currencyCode: cachedCurrencyCode } = await getCachedShopData(sortParam, filterParam);
+  const currencyCode = cachedCurrencyCode === 'NPR' ? 'NPR' : 'USD';
   const formatPrice = (amount: number) => formatCurrency(amount, currencyCode);
 
   return (

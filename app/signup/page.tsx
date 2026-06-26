@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { ArrowRight, Eye, EyeOff, Loader2, LockKeyhole, Mail, Phone, User } from 'lucide-react';
 import { useState } from 'react';
+import { emitSessionChanged, writeCachedSession } from '@/lib/session-client';
 
 export default function SignupPage() {
   const [name, setName] = useState('');
@@ -46,6 +47,16 @@ export default function SignupPage() {
         return;
       }
 
+      const nextSession = {
+        authenticated: true,
+        user: {
+          userId: data.user?.id,
+          email: data.user?.email,
+          name: data.user?.name,
+        },
+      };
+      writeCachedSession(nextSession);
+      emitSessionChanged(nextSession);
       setSuccess('Account created. Redirecting...');
       setTimeout(() => {
         window.location.href = '/account';

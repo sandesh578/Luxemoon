@@ -745,7 +745,10 @@ export async function createAdminOrder(data: any): Promise<{ success: boolean; i
       for (const item of orderItemsData) {
         await tx.product.update({
           where: { id: item.productId },
-          data: { stock: { decrement: item.quantity } }
+          data: {
+            stock: { decrement: item.quantity },
+            totalOrdersCount: { increment: item.quantity },
+          } as any
         });
       }
 

@@ -207,7 +207,8 @@ export async function POST(req: Request) {
           },
           data: {
             stock: { decrement: item.quantity },
-          },
+            totalOrdersCount: { increment: item.quantity },
+          } as any,
         });
         if (updated.count === 0) {
           const product = productSnapshots.get(item.productId);

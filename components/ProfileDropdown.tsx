@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { LogOut, Package, UserRound } from 'lucide-react';
+import { clearCachedSession, emitSessionChanged } from '@/lib/session-client';
 
 interface ProfileDropdownProps {
   open: boolean;
@@ -29,6 +30,8 @@ export function ProfileDropdown({ open, onClose, isMobile }: ProfileDropdownProp
     try {
       await fetch('/api/auth/logout', { method: 'POST' });
     } finally {
+      clearCachedSession();
+      emitSessionChanged({ authenticated: false });
       onClose();
       router.push('/');
       router.refresh();

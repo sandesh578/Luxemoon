@@ -5,6 +5,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { User, MapPin, Package, LogOut, Loader2, Plus, Pencil, Trash2, Star, ChevronRight, Phone, Mail } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { clearCachedSession, emitSessionChanged } from '@/lib/session-client';
 
 type Tab = 'profile' | 'addresses' | 'orders';
 
@@ -145,6 +146,8 @@ export default function AccountPage() {
 
   const handleLogout = async () => {
     await fetch('/api/auth/logout', { method: 'POST' });
+    clearCachedSession();
+    emitSessionChanged({ authenticated: false });
     window.location.href = '/';
   };
 

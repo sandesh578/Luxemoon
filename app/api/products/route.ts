@@ -27,7 +27,7 @@ const getCachedProducts = unstable_cache(
       orderBy: [{ isFeatured: 'desc' }, { createdAt: 'desc' }],
     }),
   ['api-products-list'],
-  { revalidate: 60, tags: ['products'] }
+  { revalidate: 300, tags: ['products'] }
 );
 
 export async function GET() {
@@ -41,7 +41,11 @@ export async function GET() {
     }));
 
     logger.info('api.products.success', { durationMs: Date.now() - startedAt, count: products.length });
-    return NextResponse.json(payload);
+    return NextResponse.json(payload, {
+      headers: {
+        'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600',
+      },
+    });
   } catch (error) {
     logger.error('api.products.failed', error, { durationMs: Date.now() - startedAt });
     return NextResponse.json({ error: 'Failed to fetch products' }, { status: 500 });

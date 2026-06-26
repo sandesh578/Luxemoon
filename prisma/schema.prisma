@@ -77,6 +77,7 @@ model Product {
   isFeatured      Boolean   @default(false)
   isNew           Boolean   @default(false)
   isBestSeller    Boolean   @default(false)
+  totalOrdersCount Int      @default(0)
   seoTitle        String?
   seoDescription  String?
   tags            String[]
@@ -114,6 +115,7 @@ model Product {
   @@index([isArchived])
   @@index([isActive, isArchived, isDraft, createdAt])
   @@index([isActive, isArchived, isDraft, isFeatured, createdAt])
+  @@index([isActive, isArchived, isDraft, totalOrdersCount, createdAt])
   @@index([categoryId, isActive, isArchived, isDraft, stock])
   @@index([name])
 }

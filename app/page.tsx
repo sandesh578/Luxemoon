@@ -7,173 +7,141 @@ import { translate } from '@/lib/i18n';
 import { getLocaleServer } from '@/lib/i18n-server';
 import { unstable_cache } from 'next/cache';
 import { formatCurrency } from '@/lib/currency';
-import { calculateDiscountedPrice } from '@/lib/settings';
 import { getSiteConfig } from '@/lib/settings-server';
 import { sanitizeAdminHtml } from '@/lib/sanitize-admin-html';
+import {
+  serializeStorefrontProduct,
+  storefrontProductSelect,
+  type StorefrontProductRecord,
+  type StorefrontProduct,
+  visibleStorefrontProductWhere,
+} from '@/lib/storefront-products';
 
-const HeroSlider = dynamic(() => import('@/components/HeroSlider').then((mod) => mod.HeroSlider));
+const NANOPLASTIA_SLUGS = ['anti-hair-fall-shampoo', 'shining-silk-hair-mask', 'soft-silky-serum'] as const;
+
+type HomepageCommunityReview = {
+  productId?: string;
+  mediaUrl?: string;
+  mediaType?: 'image' | 'video';
+  [key: string]: unknown;
+};
+
+// AnimateIn/StaggerContainer/StaggerItem wrap above-the-fold content — import statically
+// so Next.js includes them in the main bundle (no async chunk waterfall).
+import { AnimateIn, StaggerContainer, StaggerItem } from '@/components/AnimateIn';
+
+// HeroSlider is above-the-fold — import statically for better LCP
+import { HeroSlider } from '@/components/HeroSlider';
+
+// CommunitySlider, QuickAddButton are truly below-the-fold/optional — keep dynamic.
 const CommunitySlider = dynamic(() => import('@/components/CommunitySlider').then((mod) => mod.CommunitySlider));
-const AnimateIn = dynamic(() => import('@/components/AnimateIn').then((mod) => mod.AnimateIn));
-const StaggerContainer = dynamic(() => import('@/components/AnimateIn').then((mod) => mod.StaggerContainer));
-const StaggerItem = dynamic(() => import('@/components/AnimateIn').then((mod) => mod.StaggerItem));
 const QuickAddButton = dynamic(() => import('@/components/QuickAddButton').then((mod) => mod.QuickAddButton));
 
 const getCachedHomepageData = unstable_cache(
   async () => {
-    // Site config fetch is read-only on public paths.
-    const config = await getSiteConfig();
-
-    const [
-      content,
-      featuredProductsRaw,
-      newArrivalsRaw,
-      manualBestSellersRaw,
-      nanoplastiaProductsRaw,
-    ] = await Promise.all([
+    const [config, content] = await Promise.all([
+      getSiteConfig(),
       prisma.homepageContent.findUnique({ where: { id: 1 } }),
-      prisma.product.findMany({
-        where: { isActive: true, isArchived: false, isDraft: false, isFeatured: true },
-        select: {
-          id: true, slug: true, name: true, images: true, priceInside: true, originalPrice: true, isFeatured: true, discountPercent: true, discountFixed: true, discountStart: true, discountEnd: true
-        },
-        take: 4,
-        orderBy: { createdAt: 'desc' },
-      }),
-      prisma.product.findMany({
-        where: { isActive: true, isArchived: false, isDraft: false, isNew: true },
-        select: {
-          id: true, slug: true, name: true, images: true, priceInside: true, originalPrice: true, isNew: true, discountPercent: true, discountFixed: true, discountStart: true, discountEnd: true
-        },
-        take: 4,
-        orderBy: { createdAt: 'desc' },
-      }),
-      prisma.product.findMany({
-        where: { isActive: true, isArchived: false, isDraft: false, isBestSeller: true },
-        select: {
-          id: true, slug: true, name: true, images: true, priceInside: true, originalPrice: true, discountPercent: true, discountFixed: true, discountStart: true, discountEnd: true
-        },
-        take: 4,
-        orderBy: { createdAt: 'desc' },
-      }),
-      prisma.product.findMany({
-        where: {
-          isActive: true,
-          isArchived: false,
-          isDraft: false,
-          slug: {
-            in: ['anti-hair-fall-shampoo', 'shining-silk-hair-mask', 'soft-silky-serum'],
-          },
-        },
-        select: {
-          id: true, slug: true, name: true, images: true, priceInside: true, originalPrice: true, isNew: true, stock: true, discountPercent: true, discountFixed: true, discountStart: true, discountEnd: true
-        },
-        take: 3,
-        orderBy: { createdAt: 'asc' },
-      }),
     ]);
 
-    const sanitizeProducts = (products: any[]) => (products || []).filter(Boolean).map(p => {
-        if (!p) return null;
-        // Ensure priceInside and originalPrice are converted to numbers for JSON serialization
-        const basePrice = p.priceInside ? Number(p.priceInside) : 0;
-        const originalPrice = p.originalPrice ? Number(p.originalPrice) : null;
-        
-        return {
-            ...p,
-            priceInside: calculateDiscountedPrice(basePrice, p as any, config as any),
-            originalPrice: originalPrice,
-            // Next.js cache doesn't like complex objects like Decimals
-            discountStart: p.discountStart?.toISOString() || null,
-            discountEnd: p.discountEnd?.toISOString() || null,
-        };
-    }).filter(Boolean);
-
-    const communityReviewsRaw = Array.isArray((content as any)?.communityReviews) ? (content as any).communityReviews : [];
+    const communityReviewsRaw = Array.isArray((content as { communityReviews?: unknown } | null)?.communityReviews)
+      ? ((content?.communityReviews as HomepageCommunityReview[]) ?? [])
+      : [];
     const communityProductIds: string[] = Array.from(
       new Set(
         communityReviewsRaw
-          .map((review: any) => review?.productId)
+          .map((review) => review?.productId)
           .filter((productId: unknown): productId is string => typeof productId === 'string' && productId.length > 0)
       )
     );
-    const communityProductsRaw = communityProductIds.length > 0
-      ? await prisma.product.findMany({
-          where: {
-            id: { in: communityProductIds },
-            isActive: true,
-            isArchived: false,
-            isDraft: false,
-          },
-          select: {
-            id: true, slug: true, name: true, images: true, priceInside: true, originalPrice: true, discountPercent: true, discountFixed: true, discountStart: true, discountEnd: true
-          }
-        })
-      : [];
-    const productById = new Map(communityProductsRaw.map((product) => [product.id, product]));
-    
-    const fullCommunityReviews = communityReviewsRaw.map((r: any) => {
-       if (!r.productId) return r;
-       const p = productById.get(r.productId);
-       if (!p) return null;
-       const sanitizedList = sanitizeProducts([p]);
-       if (sanitizedList.length === 0) return null;
-       const sp = sanitizedList[0];
-       return { 
-         ...r, 
-         product: { 
-           ...sp, 
-           image: sp.images?.[0] || 'https://images.unsplash.com/photo-1527799820374-dcf8d9d4a388?q=80&w=200' 
-         } 
-       };
-    }).filter(Boolean);
 
-    let bestSellersRaw = manualBestSellersRaw;
-    if (manualBestSellersRaw.length < 4) {
-      const takeAmount = 4 - manualBestSellersRaw.length;
-      try {
-        const topSellingRaw = await prisma.product.findMany({
-          where: { 
-            isActive: true, 
-            isArchived: false, 
-            isDraft: false,
-            id: { notIn: manualBestSellersRaw.map(p => p.id) }
-          },
-          select: {
-            id: true, slug: true, name: true, images: true, priceInside: true, originalPrice: true, discountPercent: true, discountFixed: true, discountStart: true, discountEnd: true
-          },
-          take: takeAmount,
-          orderBy: { orderItems: { _count: 'desc' } },
-        });
-        bestSellersRaw = [...manualBestSellersRaw, ...topSellingRaw] as any[];
-      } catch (e) {
-        // Fallback if orderBy _count fails (e.g. relation issue)
-        console.error("Top selling query failed, falling back to simple query", e);
-        const fallbackRaw = await prisma.product.findMany({
-          where: { 
-            isActive: true, 
-            isArchived: false, 
-            isDraft: false,
-            id: { notIn: manualBestSellersRaw.map(p => p.id) }
-          },
-          select: {
-            id: true, slug: true, name: true, images: true, priceInside: true, originalPrice: true, discountPercent: true, discountFixed: true, discountStart: true, discountEnd: true
-          },
-          take: takeAmount,
-          orderBy: { createdAt: 'desc' },
-        });
-        bestSellersRaw = [...manualBestSellersRaw, ...fallbackRaw] as any[];
-      }
-    }
+    const [targetedProductsRaw, bestsellerFallbackRaw] = await Promise.all([
+      prisma.product.findMany({
+        where: {
+          ...visibleStorefrontProductWhere,
+          OR: [
+            { isFeatured: true },
+            { isNew: true },
+            { isBestSeller: true },
+            { slug: { in: [...NANOPLASTIA_SLUGS] } },
+            ...(communityProductIds.length > 0 ? [{ id: { in: communityProductIds } }] : []),
+          ],
+        },
+        select: storefrontProductSelect as any,
+        orderBy: [
+          { isBestSeller: 'desc' },
+          { totalOrdersCount: 'desc' },
+          { createdAt: 'desc' },
+        ] as any,
+        take: 48,
+      }) as unknown as Promise<StorefrontProductRecord[]>,
+      prisma.product.findMany({
+        where: visibleStorefrontProductWhere,
+        select: storefrontProductSelect as any,
+        orderBy: [{ totalOrdersCount: 'desc' }, { createdAt: 'desc' }] as any,
+        take: 12,
+      }) as unknown as Promise<StorefrontProductRecord[]>,
+    ]);
 
-    return [
-        JSON.parse(JSON.stringify(content)), // Deep clone to handle any JSON serialization quirks
-        sanitizeProducts(featuredProductsRaw),
-        sanitizeProducts(newArrivalsRaw),
-        sanitizeProducts(bestSellersRaw),
-        sanitizeProducts(nanoplastiaProductsRaw),
-        fullCommunityReviews,
-        config.currencyCode,
-    ] as const;
+    const serializedProducts = new Map<string, StorefrontProduct>();
+    const serialize = (product: (typeof targetedProductsRaw)[number]) => {
+      const cached = serializedProducts.get(product.id);
+      if (cached) return cached;
+
+      const serialized = serializeStorefrontProduct(product, config);
+      serializedProducts.set(product.id, serialized);
+      return serialized;
+    };
+
+    const targetedProducts = targetedProductsRaw.map(serialize);
+    const communityProductById = new Map(targetedProducts.map((product) => [product.id, product]));
+
+    const featuredProducts = targetedProducts
+      .filter((product) => product.isFeatured)
+      .slice(0, 4);
+    const newArrivals = targetedProducts
+      .filter((product) => product.isNew)
+      .slice(0, 4);
+    const manualBestSellers = targetedProducts
+      .filter((product) => product.isBestSeller)
+      .slice(0, 4);
+    const nanoplastiaProducts = targetedProducts
+      .filter((product) => NANOPLASTIA_SLUGS.includes(product.slug as (typeof NANOPLASTIA_SLUGS)[number]))
+      .sort((left, right) => NANOPLASTIA_SLUGS.indexOf(left.slug as (typeof NANOPLASTIA_SLUGS)[number]) - NANOPLASTIA_SLUGS.indexOf(right.slug as (typeof NANOPLASTIA_SLUGS)[number]));
+
+    const bestSellerIds = new Set(manualBestSellers.map((product) => product.id));
+    const bestsellerFallback = bestsellerFallbackRaw
+      .map(serialize)
+      .filter((product) => !bestSellerIds.has(product.id))
+      .slice(0, Math.max(0, 4 - manualBestSellers.length));
+    const bestSellers = [...manualBestSellers, ...bestsellerFallback];
+
+    const fullCommunityReviews = communityReviewsRaw
+      .map((review) => {
+        if (!review.productId) return review;
+
+        const product = communityProductById.get(review.productId);
+        if (!product) return null;
+
+        return {
+          ...review,
+          product: {
+            ...product,
+            image: product.images[0] || 'https://images.unsplash.com/photo-1527799820374-dcf8d9d4a388?q=80&w=200',
+          },
+        };
+      })
+      .filter((review): review is NonNullable<typeof review> => Boolean(review));
+
+    return {
+      content,
+      featuredProducts,
+      newArrivals,
+      bestSellers,
+      nanoplastiaProducts,
+      communityReviews: fullCommunityReviews,
+      currencyCode: config.currencyCode,
+    } as const;
   },
   ['home-page-data-v2'], // Bumped cache key
   { tags: ['products', 'homepage-content'], revalidate: 300 }
@@ -184,15 +152,9 @@ export default async function Home() {
   const t = (key: string, vars?: Record<string, string | number>) => translate(locale, key, vars);
   
   const homeData = await getCachedHomepageData();
-  
-  const [content, featuredProducts, newArrivals, bestSellers, nanoplastiaProducts, communityReviews, cachedCurrencyCode] = homeData;
+  const { content, featuredProducts, newArrivals, bestSellers, nanoplastiaProducts, communityReviews, currencyCode: cachedCurrencyCode } = homeData;
   const currencyCode = cachedCurrencyCode === 'NPR' ? 'NPR' : 'USD';
   const formatPrice = (amount: number) => formatCurrency(amount, currencyCode);
-
-  const nanoplastiaOrder = ['anti-hair-fall-shampoo', 'shining-silk-hair-mask', 'soft-silky-serum'];
-  const orderedNanoplastiaProducts = [...nanoplastiaProducts].sort(
-    (a, b) => nanoplastiaOrder.indexOf(a.slug) - nanoplastiaOrder.indexOf(b.slug)
-  );
 
   const slides = (content?.heroSlides as any[]) || [
     {
@@ -286,7 +248,7 @@ export default async function Home() {
               <div className="section-divider mx-auto !bg-amber-600" />
             </AnimateIn>
             <StaggerContainer className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 md:gap-10">
-              {orderedNanoplastiaProducts.map((p) => {
+              {nanoplastiaProducts.map((p, i) => {
                 const derivedDiscount = p.discountPercent && p.discountPercent > 0
                   ? p.discountPercent
                   : (p.originalPrice && p.originalPrice > p.priceInside)
@@ -294,7 +256,7 @@ export default async function Home() {
                     : 0;
 
                 return (
-                  <StaggerItem key={p.id} className="group flex flex-col items-center text-center">
+                  <StaggerItem key={p.id} staggerIndex={i} className="group flex flex-col items-center text-center">
                     <Link href={`/products/${p.slug}`} className="w-full relative aspect-[4/5] rounded-2xl overflow-hidden bg-stone-800 mb-4 md:mb-6 shadow-2xl block card-premium border border-stone-700/60">
                       {p.images && p.images[0] && (
                         <Image
@@ -402,26 +364,24 @@ export default async function Home() {
         </section>
       )}
 
-
-
       {/* 10. Brand Values Grid */}
       <section className="py-16 md:py-20 lg:py-24 px-4 bg-stone-900 text-[#F6EFE7]">
         <StaggerContainer className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-8 md:gap-12 text-center">
-          <StaggerItem className="space-y-4">
+          <StaggerItem staggerIndex={0} className="space-y-4">
             <div className="w-14 h-14 md:w-16 md:h-16 bg-amber-600/10 rounded-full flex items-center justify-center mx-auto mb-4 md:mb-6">
               <Zap className="w-7 h-7 md:w-8 md:h-8 text-amber-500" />
             </div>
             <h3 className="text-xl md:text-2xl font-semibold tracking-tight">{t('home.quickAbsorption')}</h3>
             <p className="text-stone-400 leading-relaxed text-sm md:text-base">{t('home.quickAbsorptionBody')}</p>
           </StaggerItem>
-          <StaggerItem className="space-y-4">
+          <StaggerItem staggerIndex={1} className="space-y-4">
             <div className="w-14 h-14 md:w-16 md:h-16 bg-amber-600/10 rounded-full flex items-center justify-center mx-auto mb-4 md:mb-6">
               <ShieldCheck className="w-7 h-7 md:w-8 md:h-8 text-amber-500" />
             </div>
             <h3 className="text-xl md:text-2xl font-semibold tracking-tight">{t('home.cleanIngredients')}</h3>
             <p className="text-stone-400 leading-relaxed text-sm md:text-base">{t('home.cleanIngredientsBody')}</p>
           </StaggerItem>
-          <StaggerItem className="space-y-4">
+          <StaggerItem staggerIndex={2} className="space-y-4">
             <div className="w-14 h-14 md:w-16 md:h-16 bg-amber-600/10 rounded-full flex items-center justify-center mx-auto mb-4 md:mb-6">
               <Star className="w-7 h-7 md:w-8 md:h-8 text-amber-500" />
             </div>
@@ -481,8 +441,8 @@ function ProductGrid({
         </AnimateIn>
 
         <StaggerContainer className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 md:gap-8">
-          {products.map((p) => (
-            <StaggerItem key={p.id}>
+          {products.map((p, i) => (
+            <StaggerItem key={p.id} staggerIndex={i}>
               <Link href={`/products/${p.slug}`} className="block group">
                 <div className="relative aspect-[3/4] rounded-2xl overflow-hidden bg-stone-100 mb-4 shadow-sm border border-stone-200/50">
                   {p.images && p.images[0] && (

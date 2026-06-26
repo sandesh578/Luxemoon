@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { ArrowRight, Eye, EyeOff, Loader2, LockKeyhole, Mail } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
+import { emitSessionChanged, writeCachedSession } from '@/lib/session-client';
 
 export default function LoginPage() {
   const searchParams = useSearchParams();
@@ -42,6 +43,16 @@ export default function LoginPage() {
         return;
       }
 
+      const nextSession = {
+        authenticated: true,
+        user: {
+          userId: data.user?.id,
+          email: data.user?.email,
+          name: data.user?.name,
+        },
+      };
+      writeCachedSession(nextSession);
+      emitSessionChanged(nextSession);
       setSuccess('Login successful. Redirecting...');
       setTimeout(() => {
         window.location.href = '/account';

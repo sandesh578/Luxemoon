@@ -16,7 +16,6 @@ interface Slide {
 
 export const HeroSlider = ({ slides }: { slides: Slide[] }) => {
     const [current, setCurrent] = useState(0);
-    const [isMobileViewport, setIsMobileViewport] = useState(false);
     const scrollRef = useRef<HTMLDivElement>(null);
     const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const scrollRafRef = useRef<number | null>(null);
@@ -52,19 +51,6 @@ export const HeroSlider = ({ slides }: { slides: Slide[] }) => {
         };
     }, [resetTimer]);
 
-    useEffect(() => {
-        const mediaQuery = window.matchMedia('(max-width: 767px)');
-        const syncViewport = () => setIsMobileViewport(mediaQuery.matches);
-        syncViewport();
-
-        if (typeof mediaQuery.addEventListener === 'function') {
-            mediaQuery.addEventListener('change', syncViewport);
-            return () => mediaQuery.removeEventListener('change', syncViewport);
-        }
-
-        mediaQuery.addListener(syncViewport);
-        return () => mediaQuery.removeListener(syncViewport);
-    }, []);
 
     const handleScroll = useCallback(() => {
         if (!scrollRef.current) return;
@@ -108,25 +94,53 @@ export const HeroSlider = ({ slides }: { slides: Slide[] }) => {
                     const isFirst = index === 0;
                     const fallbackSrc = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
                     const desktopSrc = slide.image || fallbackSrc;
-                    const imgSrc = (isMobileViewport && slide.mobileImage) ? slide.mobileImage : desktopSrc;
 
                     return (
                         <div
                             key={index}
                             className="w-full h-full flex-shrink-0 snap-center relative"
                         >
-                            <Image
-                                src={imgSrc}
-                                className="object-cover object-center"
-                                alt={slide.title || 'Luxe Moon Hero'}
-                                fill
-                                quality={isFirst ? 85 : 75}
-                                priority={isFirst}
-                                loading={isFirst ? 'eager' : 'lazy'}
-                                sizes="(max-width: 768px) 100vw, 100vw"
-                                fetchPriority={isFirst ? 'high' : 'auto'}
-                                decoding={isFirst ? 'sync' : 'async'}
-                            />
+                            {slide.mobileImage ? (
+                                <>
+                                    <Image
+                                        src={slide.mobileImage}
+                                        className="object-cover object-center md:hidden"
+                                        alt={slide.title || 'Luxe Moon Hero'}
+                                        fill
+                                        quality={isFirst ? 85 : 75}
+                                        priority={isFirst}
+                                        loading={isFirst ? 'eager' : 'lazy'}
+                                        sizes="100vw"
+                                        fetchPriority={isFirst ? 'high' : 'auto'}
+                                        decoding={isFirst ? 'sync' : 'async'}
+                                    />
+                                    <Image
+                                        src={desktopSrc}
+                                        className="object-cover object-center hidden md:block"
+                                        alt={slide.title || 'Luxe Moon Hero'}
+                                        fill
+                                        quality={isFirst ? 85 : 75}
+                                        priority={isFirst}
+                                        loading={isFirst ? 'eager' : 'lazy'}
+                                        sizes="100vw"
+                                        fetchPriority={isFirst ? 'high' : 'auto'}
+                                        decoding={isFirst ? 'sync' : 'async'}
+                                    />
+                                </>
+                            ) : (
+                                <Image
+                                    src={desktopSrc}
+                                    className="object-cover object-center"
+                                    alt={slide.title || 'Luxe Moon Hero'}
+                                    fill
+                                    quality={isFirst ? 85 : 75}
+                                    priority={isFirst}
+                                    loading={isFirst ? 'eager' : 'lazy'}
+                                    sizes="100vw"
+                                    fetchPriority={isFirst ? 'high' : 'auto'}
+                                    decoding={isFirst ? 'sync' : 'async'}
+                                />
+                            )}
 
                             <div className="absolute inset-0 bg-black/25 pointer-events-none" />
 
