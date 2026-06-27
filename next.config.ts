@@ -16,7 +16,7 @@ const nextConfig: NextConfig = {
   },
   experimental: {
     staticGenerationMaxConcurrency: 1,
-    optimizePackageImports: ['lucide-react'],
+    optimizePackageImports: ['lucide-react', 'framer-motion'],
     serverActions: {
       bodySizeLimit: '2mb',
     },

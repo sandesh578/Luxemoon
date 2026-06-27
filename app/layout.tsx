@@ -1,4 +1,5 @@
 import React from "react";
+import ReactDOM from "react-dom";
 import type { Metadata } from "next";
 import { Playfair_Display, Lato } from "next/font/google";
 import "./globals.css";
@@ -115,6 +116,8 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  ReactDOM.preconnect("https://res.cloudinary.com", { crossOrigin: "anonymous" });
+  ReactDOM.preconnect("https://nominatim.openstreetmap.org", { crossOrigin: "anonymous" });
   try {
     validateServerEnv();
   } catch (e) {
@@ -166,8 +169,6 @@ export default async function RootLayout({
   return (
     <html lang={DEFAULT_LOCALE} suppressHydrationWarning>
       <head>
-        <link rel="preconnect" href="https://res.cloudinary.com" crossOrigin="" />
-        <link rel="preconnect" href="https://nominatim.openstreetmap.org" crossOrigin="" />
       </head>
       <body className={`${playfair.variable} ${lato.variable} font-sans bg-[#F6EFE7] text-[#5C3A21]`} suppressHydrationWarning>
         <Providers config={config} initialLocale={DEFAULT_LOCALE}>

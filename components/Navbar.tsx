@@ -176,10 +176,10 @@ export const Navbar = () => {
               </div>
 
               <div className="hidden md:flex items-center gap-8 text-sm font-semibold text-stone-600 tracking-wide">
-                <Link href="/" className="hover:text-amber-700 transition-colors">{t('nav.home').toUpperCase()}</Link>
-                <Link href="/shop" className="hover:text-amber-700 transition-colors">{t('nav.shop').toUpperCase()}</Link>
-                <Link href="/about" className="hover:text-amber-700 transition-colors">{t('nav.ourStory').toUpperCase()}</Link>
-                <Link href="/contact" className="hover:text-amber-700 transition-colors">{t('nav.contact').toUpperCase()}</Link>
+                <Link prefetch={true} href="/" className="hover:text-amber-700 transition-colors">{t('nav.home').toUpperCase()}</Link>
+                <Link prefetch={true} href="/shop" className="hover:text-amber-700 transition-colors">{t('nav.shop').toUpperCase()}</Link>
+                <Link prefetch={true} href="/about" className="hover:text-amber-700 transition-colors">{t('nav.ourStory').toUpperCase()}</Link>
+                <Link prefetch={true} href="/contact" className="hover:text-amber-700 transition-colors">{t('nav.contact').toUpperCase()}</Link>
               </div>
 
               <div className="flex items-center gap-4 sm:gap-5">

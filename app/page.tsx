@@ -345,6 +345,7 @@ async function HomeContent({ locale }: { locale: Locale }) {
                 return (
                   <StaggerItem key={p.id} staggerIndex={i} className="group flex flex-col items-center text-center">
                     <Link
+                      prefetch={i < 4 ? true : undefined}
                       href={`/products/${p.slug}`}
                       className="w-full relative aspect-[4/5] rounded-2xl overflow-hidden bg-stone-800 mb-4 md:mb-6 shadow-2xl block card-premium border border-stone-700/60"
                     >
@@ -585,7 +586,7 @@ function ProductGrid({
         <StaggerContainer className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 md:gap-8">
           {products.map((p, i) => (
             <StaggerItem key={p.id} staggerIndex={i}>
-              <Link href={`/products/${p.slug}`} className="block group">
+              <Link prefetch={i < 4 ? true : undefined} href={`/products/${p.slug}`} className="block group">
                 <div className="relative aspect-[3/4] rounded-2xl overflow-hidden bg-stone-100 mb-4 shadow-sm border border-stone-200/50">
                   {p.images && p.images[0] && (
                     <Image
