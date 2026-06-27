@@ -6,6 +6,10 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   reactStrictMode: true,
   output: "standalone",
+  // Prevent Prisma from being bundled into the Lambda JS chunk.
+  // Prisma uses native binaries that must stay as external node_modules.
+  // Bundling them inflates the cold-start bundle and can cause runtime errors.
+  serverExternalPackages: ['@prisma/client', '.prisma/client'],
   outputFileTracingIncludes: {
     '/*': ['./node_modules/@prisma/client/**/*', './node_modules/.prisma/client/**/*', './prisma/schema.prisma'],
     '/api/**/*': ['./node_modules/@prisma/client/**/*', './node_modules/.prisma/client/**/*', './prisma/schema.prisma'],
