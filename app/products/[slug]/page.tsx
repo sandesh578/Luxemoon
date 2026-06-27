@@ -33,8 +33,8 @@ function toIsoString(value: Date | string) {
   return value instanceof Date ? value.toISOString() : new Date(value).toISOString();
 }
 
-const getProduct = unstable_cache(
-  async (slug: string) => {
+const getProduct = (slug: string) => unstable_cache(
+  async () => {
     const data = await prisma.product.findUnique({
       where: { slug },
       include: {
@@ -83,9 +83,9 @@ const getProduct = unstable_cache(
         discountEnd: data.discountEnd?.toISOString() || null,
     };
   },
-  ['product-detail', 'by-slug'],
+  ['product-detail', slug],
   { tags: ['products', 'reviews', 'transformations'], revalidate: 300 }
-);
+)();
 
 const getUnavailableSuggestions = unstable_cache(
   async () => {
@@ -107,8 +107,8 @@ const getUnavailableSuggestions = unstable_cache(
   { tags: ['products'], revalidate: 300 }
 );
 
-const getRelatedProducts = unstable_cache(
-  async (productId: string, categoryId: string | null) => {
+const getRelatedProducts = (productId: string, categoryId: string | null) => unstable_cache(
+  async () => {
     if (!categoryId) return [];
 
     const related = await prisma.product.findMany({
@@ -131,9 +131,9 @@ const getRelatedProducts = unstable_cache(
         originalPrice: r.originalPrice ? Number(r.originalPrice) : null,
     }));
   },
-  ['related-products', 'by-cat'],
+  ['related-products', productId, categoryId || 'none'],
   { tags: ['products'], revalidate: 300 }
-);
+)();
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;

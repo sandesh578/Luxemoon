@@ -123,12 +123,34 @@ export default async function RootLayout({
     console.warn("Environment validation skipped or failed in RootLayout:", e instanceof Error ? e.message : e);
   }
   const [rawConfig, noticeBar] = await Promise.all([
-    getSiteConfig().catch(() => SAFE_SITE_CONFIG as any),
-    getHomepageNotice().catch(() => ({
-      noticeBarText: null,
-      noticeBarEnabled: false,
-      noticeBarStill: false,
-    })),
+    Promise.race([
+      getSiteConfig().catch(() => SAFE_SITE_CONFIG as any),
+      new Promise<typeof SAFE_SITE_CONFIG>((resolve) =>
+        setTimeout(() => resolve(SAFE_SITE_CONFIG as any), 800)
+      )
+    ]),
+    Promise.race([
+      getHomepageNotice().catch(() => ({
+        noticeBarText: null,
+        noticeBarEnabled: false,
+        noticeBarStill: false,
+      })),
+      new Promise<{
+        noticeBarText: string | null;
+        noticeBarEnabled: boolean;
+        noticeBarStill: boolean;
+      }>((resolve) =>
+        setTimeout(
+          () =>
+            resolve({
+              noticeBarText: null,
+              noticeBarEnabled: false,
+              noticeBarStill: false,
+            }),
+          800
+        )
+      )
+    ]),
   ]);
 
   const config = {

@@ -1,9 +1,10 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import dynamic from 'next/dynamic';
+import { Suspense } from 'react';
 import { prisma } from '@/lib/prisma';
 import { ChevronRight, Star, ShieldCheck, Zap, ArrowRight } from 'lucide-react';
-import { translate } from '@/lib/i18n';
+import { translate, type Locale } from '@/lib/i18n';
 import { getLocaleServer } from '@/lib/i18n-server';
 import { unstable_cache } from 'next/cache';
 import { formatCurrency } from '@/lib/currency';
@@ -37,6 +38,37 @@ import { HeroSlider } from '@/components/HeroSlider';
 const CommunitySlider = dynamic(() => import('@/components/CommunitySlider').then((mod) => mod.CommunitySlider));
 const QuickAddButton = dynamic(() => import('@/components/QuickAddButton').then((mod) => mod.QuickAddButton));
 
+// ─── Default slide used when hero DB query fails or returns empty ─────────────
+const DEFAULT_HERO_SLIDE = {
+  image: 'https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?q=80&w=2574&auto=format&fit=crop',
+  title: 'Nano Botox 4-in-1',
+  subtitle:
+    'Shampoo + Hair Mask + Hair Serum. Build stronger, smoother, shinier hair in a complete 3-step routine.',
+  link: '/shop',
+  buttonText: 'SHOP 3-STEP ROUTINE',
+};
+
+// ─── FAST PATH: Only hero slides — single tiny select, ~50ms on warm cache ───
+// Keeps completely separate from the heavy product queries so the hero renders
+// even while the rest of the page is still loading.
+const getCachedHeroSlides = unstable_cache(
+  async () => {
+    try {
+      const content = await prisma.homepageContent.findUnique({
+        where: { id: 1 },
+        select: { heroSlides: true },
+      });
+      return (content?.heroSlides as any[]) ?? [];
+    } catch {
+      return [];
+    }
+  },
+  ['home-hero-slides-v1'],
+  { tags: ['homepage-content'], revalidate: 300 }
+);
+
+// ─── SLOW PATH: Full homepage data (5 DB queries, product-heavy) ─────────────
+// This runs inside <Suspense> so it never blocks the hero from rendering.
 const getCachedHomepageData = unstable_cache(
   async () => {
     const [config, content] = await Promise.all([
@@ -87,7 +119,6 @@ const getCachedHomepageData = unstable_cache(
     const serialize = (product: (typeof targetedProductsRaw)[number]) => {
       const cached = serializedProducts.get(product.id);
       if (cached) return cached;
-
       const serialized = serializeStorefrontProduct(product, config);
       serializedProducts.set(product.id, serialized);
       return serialized;
@@ -96,18 +127,16 @@ const getCachedHomepageData = unstable_cache(
     const targetedProducts = targetedProductsRaw.map(serialize);
     const communityProductById = new Map(targetedProducts.map((product) => [product.id, product]));
 
-    const featuredProducts = targetedProducts
-      .filter((product) => product.isFeatured)
-      .slice(0, 4);
-    const newArrivals = targetedProducts
-      .filter((product) => product.isNew)
-      .slice(0, 4);
-    const manualBestSellers = targetedProducts
-      .filter((product) => product.isBestSeller)
-      .slice(0, 4);
+    const featuredProducts = targetedProducts.filter((product) => product.isFeatured).slice(0, 4);
+    const newArrivals = targetedProducts.filter((product) => product.isNew).slice(0, 4);
+    const manualBestSellers = targetedProducts.filter((product) => product.isBestSeller).slice(0, 4);
     const nanoplastiaProducts = targetedProducts
       .filter((product) => NANOPLASTIA_SLUGS.includes(product.slug as (typeof NANOPLASTIA_SLUGS)[number]))
-      .sort((left, right) => NANOPLASTIA_SLUGS.indexOf(left.slug as (typeof NANOPLASTIA_SLUGS)[number]) - NANOPLASTIA_SLUGS.indexOf(right.slug as (typeof NANOPLASTIA_SLUGS)[number]));
+      .sort(
+        (left, right) =>
+          NANOPLASTIA_SLUGS.indexOf(left.slug as (typeof NANOPLASTIA_SLUGS)[number]) -
+          NANOPLASTIA_SLUGS.indexOf(right.slug as (typeof NANOPLASTIA_SLUGS)[number])
+      );
 
     const bestSellerIds = new Set(manualBestSellers.map((product) => product.id));
     const bestsellerFallback = bestsellerFallbackRaw
@@ -119,15 +148,15 @@ const getCachedHomepageData = unstable_cache(
     const fullCommunityReviews = communityReviewsRaw
       .map((review) => {
         if (!review.productId) return review;
-
         const product = communityProductById.get(review.productId);
         if (!product) return null;
-
         return {
           ...review,
           product: {
             ...product,
-            image: product.images[0] || 'https://images.unsplash.com/photo-1527799820374-dcf8d9d4a388?q=80&w=200',
+            image:
+              product.images[0] ||
+              'https://images.unsplash.com/photo-1527799820374-dcf8d9d4a388?q=80&w=200',
           },
         };
       })
@@ -147,31 +176,68 @@ const getCachedHomepageData = unstable_cache(
   { tags: ['products', 'homepage-content'], revalidate: 300 }
 );
 
-export default async function Home() {
-  const locale = await getLocaleServer();
+// ─── Skeleton: shown while HomeContent is streaming in ───────────────────────
+// Matches the visual weight of the trust bar + first product grid section
+// so there's no layout shift when real content arrives.
+function HomeContentSkeleton() {
+  return (
+    <div className="animate-pulse" aria-hidden="true">
+      {/* Trust bar placeholder */}
+      <div className="bg-stone-900 overflow-hidden py-3.5 md:py-4 border-y border-stone-800">
+        <div className="max-w-7xl mx-auto px-4 flex flex-wrap justify-center md:justify-between items-center gap-6 md:gap-4">
+          {[...Array(4)].map((_, i) => (
+            <div key={i} className="h-3 bg-stone-700 rounded-full w-28" />
+          ))}
+        </div>
+      </div>
+      {/* Best sellers grid placeholder */}
+      <div className="py-16 md:py-20 lg:py-24 px-4 bg-[#FDFCFB]">
+        <div className="max-w-7xl mx-auto space-y-10 md:space-y-14">
+          <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
+            <div className="space-y-3">
+              <div className="h-8 bg-stone-200 rounded w-48" />
+              <div className="h-4 bg-stone-200 rounded w-72" />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 md:gap-8">
+            {[...Array(4)].map((_, i) => (
+              <div key={i} className="space-y-4">
+                <div className="aspect-[3/4] rounded-2xl bg-stone-200" />
+                <div className="h-4 bg-stone-200 rounded w-3/4" />
+                <div className="h-4 bg-stone-200 rounded w-1/3" />
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Async server component: all sections below hero ─────────────────────────
+// Runs inside <Suspense fallback={<HomeContentSkeleton />}> in Home().
+// Because it's a separate async component, it can take as long as needed
+// without blocking the hero from painting.
+async function HomeContent({ locale }: { locale: Locale }) {
   const t = (key: string, vars?: Record<string, string | number>) => translate(locale, key, vars);
-  
+
   const homeData = await getCachedHomepageData();
-  const { content, featuredProducts, newArrivals, bestSellers, nanoplastiaProducts, communityReviews, currencyCode: cachedCurrencyCode } = homeData;
+  const {
+    content,
+    featuredProducts,
+    newArrivals,
+    bestSellers,
+    nanoplastiaProducts,
+    communityReviews,
+    currencyCode: cachedCurrencyCode,
+  } = homeData;
+
   const currencyCode = cachedCurrencyCode === 'NPR' ? 'NPR' : 'USD';
   const formatPrice = (amount: number) => formatCurrency(amount, currencyCode);
 
-  const slides = (content?.heroSlides as any[]) || [
-    {
-      image: "https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?q=80&w=2574&auto=format&fit=crop",
-      title: "Nano Botox 4-in-1",
-      subtitle: "Shampoo + Hair Mask + Hair Serum. Build stronger, smoother, shinier hair in a complete 3-step routine.",
-      link: "/shop",
-      buttonText: "SHOP 3-STEP ROUTINE"
-    }
-  ];
-
   return (
-    <main className="min-h-screen bg-gradient-to-b from-[#FDFCFB] via-[#FBF7F2] to-[#F6EFE7]">
-      {/* 1. Hero Section */}
-      <HeroSlider slides={slides} />
-
-      {/* 2. Best Sellers */}
+    <>
+      {/* 2. Best Sellers — priorityCount=2 preloads first 2 images (above fold) */}
       {bestSellers.length > 0 && (
         <ProductGrid
           title={t('home.bestTitle')}
@@ -182,6 +248,7 @@ export default async function Home() {
           offerLabel={t('home.offer')}
           newLabel={t('home.newBadge')}
           currencyCode={currencyCode}
+          priorityCount={2}
         />
       )}
 
@@ -202,19 +269,28 @@ export default async function Home() {
           <div className="max-w-5xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-10 md:gap-16 items-center rounded-3xl border border-stone-200/70 bg-white/80 p-6 md:p-10 shadow-sm">
             <div className="relative aspect-[4/5] rounded-2xl overflow-hidden shadow-xl">
               <Image
-                src={(((content?.promotionalImages as string[]) || [])[0]) || "https://images.unsplash.com/photo-1527799820374-dcf8d9d4a388?q=80&w=1974&auto=format&fit=crop"}
+                src={
+                  (((content?.promotionalImages as string[]) || [])[0]) ||
+                  'https://images.unsplash.com/photo-1527799820374-dcf8d9d4a388?q=80&w=1974&auto=format&fit=crop'
+                }
                 className="object-cover"
                 alt="Brand Story"
                 fill
                 sizes="(max-width: 768px) 100vw, 50vw"
+                loading="lazy"
               />
             </div>
             <div className="space-y-6 md:space-y-8">
               <div className="space-y-4">
-                <span className="text-amber-600 font-semibold tracking-[0.2em] text-xs uppercase">{(content as any)?.heritageSubtitle || t('home.heritageLabel')}</span>
+                <span className="text-amber-600 font-semibold tracking-[0.2em] text-xs uppercase">
+                  {(content as any)?.heritageSubtitle || t('home.heritageLabel')}
+                </span>
                 <h2 className="text-2xl md:text-3xl lg:text-4xl font-semibold text-stone-900 leading-tight tracking-tight whitespace-pre-line">
                   {(content as any)?.heritageTitle || (
-                    <>{t('home.heritageTitleLine1')} <br/><span className="italic text-amber-700">{t('home.heritageTitleLine2')}</span></>
+                    <>
+                      {t('home.heritageTitleLine1')} <br />
+                      <span className="italic text-amber-700">{t('home.heritageTitleLine2')}</span>
+                    </>
                   )}
                 </h2>
                 <div className="section-divider" />
@@ -229,35 +305,49 @@ export default async function Home() {
                   </p>
                 )}
               </div>
-              <Link href="/about" className="group inline-flex items-center gap-2 font-bold text-stone-900 border-b-2 border-amber-600 pb-1 hover:text-amber-700 transition-colors text-sm">
-                {t('home.readFullStory')} <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+              <Link
+                href="/about"
+                className="group inline-flex items-center gap-2 font-bold text-stone-900 border-b-2 border-amber-600 pb-1 hover:text-amber-700 transition-colors text-sm"
+              >
+                {t('home.readFullStory')}{' '}
+                <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
               </Link>
             </div>
           </div>
         </section>
       </AnimateIn>
 
-      {/* 5. Category Banners (Shampoo / Serum section) */}
+      {/* 5. Nanoplastia / 3-Step Routine (dark section) */}
       {nanoplastiaProducts && nanoplastiaProducts.length > 0 && (
         <section className="py-16 md:py-20 lg:py-24 px-4 bg-gradient-to-b from-stone-900 to-stone-800 border-y border-stone-700/70 text-[#F6EFE7]">
           <div className="max-w-7xl mx-auto space-y-12 md:space-y-16">
             <AnimateIn className="text-center space-y-4">
-              <span className="text-amber-500 font-semibold tracking-[0.2em] text-xs uppercase">{t('home.nanoLabel')}</span>
-              <h2 className="text-2xl md:text-3xl lg:text-4xl font-semibold tracking-tight">{t('home.nanoTitle')}</h2>
-              <p className="text-stone-400 max-w-lg mx-auto text-sm md:text-base">{t('home.nanoSubtitle')}</p>
+              <span className="text-amber-500 font-semibold tracking-[0.2em] text-xs uppercase">
+                {t('home.nanoLabel')}
+              </span>
+              <h2 className="text-2xl md:text-3xl lg:text-4xl font-semibold tracking-tight">
+                {t('home.nanoTitle')}
+              </h2>
+              <p className="text-stone-400 max-w-lg mx-auto text-sm md:text-base">
+                {t('home.nanoSubtitle')}
+              </p>
               <div className="section-divider mx-auto !bg-amber-600" />
             </AnimateIn>
             <StaggerContainer className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 md:gap-10">
               {nanoplastiaProducts.map((p, i) => {
-                const derivedDiscount = p.discountPercent && p.discountPercent > 0
-                  ? p.discountPercent
-                  : (p.originalPrice && p.originalPrice > p.priceInside)
+                const derivedDiscount =
+                  p.discountPercent && p.discountPercent > 0
+                    ? p.discountPercent
+                    : p.originalPrice && p.originalPrice > p.priceInside
                     ? Math.max(1, Math.round(((p.originalPrice - p.priceInside) / p.originalPrice) * 100))
                     : 0;
 
                 return (
                   <StaggerItem key={p.id} staggerIndex={i} className="group flex flex-col items-center text-center">
-                    <Link href={`/products/${p.slug}`} className="w-full relative aspect-[4/5] rounded-2xl overflow-hidden bg-stone-800 mb-4 md:mb-6 shadow-2xl block card-premium border border-stone-700/60">
+                    <Link
+                      href={`/products/${p.slug}`}
+                      className="w-full relative aspect-[4/5] rounded-2xl overflow-hidden bg-stone-800 mb-4 md:mb-6 shadow-2xl block card-premium border border-stone-700/60"
+                    >
                       {p.images && p.images[0] && (
                         <Image
                           src={p.images[0]}
@@ -265,6 +355,7 @@ export default async function Home() {
                           alt={p.name}
                           fill
                           sizes="(max-width: 640px) 100vw, (max-width: 768px) 50vw, 33vw"
+                          loading="lazy"
                         />
                       )}
                       {derivedDiscount > 0 && (
@@ -274,22 +365,34 @@ export default async function Home() {
                       )}
                       <div className="absolute inset-0 bg-gradient-to-t from-stone-900/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
                     </Link>
-                    <h3 className="font-serif text-lg md:text-xl text-white mb-2 group-hover:text-amber-500 transition-colors">{p.name}</h3>
+                    <h3 className="font-serif text-lg md:text-xl text-white mb-2 group-hover:text-amber-500 transition-colors">
+                      {p.name}
+                    </h3>
                     <div className="flex items-center justify-center gap-3 mb-4 md:mb-6">
-                      <span className="font-bold text-amber-500 text-base md:text-lg">{formatPrice(p.priceInside)}</span>
+                      <span className="font-bold text-amber-500 text-base md:text-lg">
+                        {formatPrice(p.priceInside)}
+                      </span>
                       {p.originalPrice && p.originalPrice > p.priceInside && (
-                        <span className="text-stone-500 line-through text-sm">{formatPrice(p.originalPrice)}</span>
+                        <span className="text-stone-500 line-through text-sm">
+                          {formatPrice(p.originalPrice)}
+                        </span>
                       )}
                     </div>
                     <div className="w-full max-w-xs transition-all duration-300 opacity-100 translate-y-0 lg:opacity-0 lg:-translate-y-4 pointer-events-auto lg:pointer-events-none group-hover:opacity-100 group-hover:translate-y-0 group-hover:pointer-events-auto">
-                      <QuickAddButton product={p} className="w-full py-3 bg-amber-600 text-white text-sm font-bold rounded-full flex items-center justify-center gap-2 hover:bg-amber-500 hover:scale-105 transition-all duration-300 shadow-lg shadow-amber-900/20 active:scale-[0.98]" />
+                      <QuickAddButton
+                        product={p}
+                        className="w-full py-3 bg-amber-600 text-white text-sm font-bold rounded-full flex items-center justify-center gap-2 hover:bg-amber-500 hover:scale-105 transition-all duration-300 shadow-lg shadow-amber-900/20 active:scale-[0.98]"
+                      />
                     </div>
                   </StaggerItem>
                 );
               })}
             </StaggerContainer>
             <div className="text-center">
-              <Link href="/shop" className="inline-flex items-center gap-2 font-bold text-amber-500 border-b-2 border-amber-600/30 pb-1 hover:text-amber-400 transition-colors uppercase tracking-wider text-sm">
+              <Link
+                href="/shop"
+                className="inline-flex items-center gap-2 font-bold text-amber-500 border-b-2 border-amber-600/30 pb-1 hover:text-amber-400 transition-colors uppercase tracking-wider text-sm"
+              >
                 {t('home.shop3Step')} <ArrowRight className="w-4 h-4" />
               </Link>
             </div>
@@ -308,6 +411,7 @@ export default async function Home() {
           offerLabel={t('home.offer')}
           newLabel={t('home.newBadge')}
           currencyCode={currencyCode}
+          priorityCount={0}
         />
       )}
 
@@ -322,6 +426,7 @@ export default async function Home() {
           offerLabel={t('home.offer')}
           newLabel={t('home.newBadge')}
           currencyCode={currencyCode}
+          priorityCount={0}
         />
       )}
 
@@ -330,28 +435,39 @@ export default async function Home() {
         <AnimateIn>
           <section className="py-16 md:py-20 px-4 bg-white">
             <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8">
-              {(content?.banners as any[])?.filter((b: any) => b?.image).map((banner: any, i: number) => (
-                <Link key={i} href={banner.link || '#'} className="relative group overflow-hidden rounded-3xl aspect-[16/9] shadow-sm hover:shadow-lg transition-shadow duration-500 block bg-stone-100 border border-stone-200/70">
-                  <Image
-                    src={banner.image}
-                    className="object-cover group-hover:scale-105 transition-transform duration-700"
-                    alt={banner.title || 'Campaign Banner'}
-                    fill
-                    sizes="(max-width: 768px) 100vw, 50vw"
-                  />
-                  <div className="absolute inset-0 bg-black/10 group-hover:bg-black/30 transition-colors duration-500" />
-                  <div className="absolute inset-0 flex items-center p-6 md:p-10">
-                    <div className="max-w-xs space-y-3">
-                      {banner.title && <h3 className="text-xl md:text-2xl font-semibold text-white leading-tight tracking-tight">{banner.title}</h3>}
-                      {banner.link && (
-                        <span className="inline-flex items-center gap-1 text-white text-xs font-bold border-b border-white pb-1 group-hover:gap-2 transition-all uppercase tracking-wider">
-                          {t('home.exploreNow')} <ChevronRight className="w-3 h-3" />
-                        </span>
-                      )}
+              {(content?.banners as any[])
+                ?.filter((b: any) => b?.image)
+                .map((banner: any, i: number) => (
+                  <Link
+                    key={i}
+                    href={banner.link || '#'}
+                    className="relative group overflow-hidden rounded-3xl aspect-[16/9] shadow-sm hover:shadow-lg transition-shadow duration-500 block bg-stone-100 border border-stone-200/70"
+                  >
+                    <Image
+                      src={banner.image}
+                      className="object-cover group-hover:scale-105 transition-transform duration-700"
+                      alt={banner.title || 'Campaign Banner'}
+                      fill
+                      sizes="(max-width: 768px) 100vw, 50vw"
+                      loading="lazy"
+                    />
+                    <div className="absolute inset-0 bg-black/10 group-hover:bg-black/30 transition-colors duration-500" />
+                    <div className="absolute inset-0 flex items-center p-6 md:p-10">
+                      <div className="max-w-xs space-y-3">
+                        {banner.title && (
+                          <h3 className="text-xl md:text-2xl font-semibold text-white leading-tight tracking-tight">
+                            {banner.title}
+                          </h3>
+                        )}
+                        {banner.link && (
+                          <span className="inline-flex items-center gap-1 text-white text-xs font-bold border-b border-white pb-1 group-hover:gap-2 transition-all uppercase tracking-wider">
+                            {t('home.exploreNow')} <ChevronRight className="w-3 h-3" />
+                          </span>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                </Link>
-              ))}
+                  </Link>
+                ))}
             </div>
           </section>
         </AnimateIn>
@@ -390,9 +506,32 @@ export default async function Home() {
           </StaggerItem>
         </StaggerContainer>
       </section>
+    </>
+  );
+}
+
+// ─── Page entry point ─────────────────────────────────────────────────────────
+// Hero renders immediately from a single tiny DB read.
+// Everything else streams in via Suspense without blocking the hero.
+export default async function Home() {
+  const locale = await getLocaleServer();
+  const heroSlides = await getCachedHeroSlides();
+  const slides = heroSlides.length > 0 ? heroSlides : [DEFAULT_HERO_SLIDE];
+
+  return (
+    <main className="min-h-screen bg-gradient-to-b from-[#FDFCFB] via-[#FBF7F2] to-[#F6EFE7]">
+      {/* Hero: renders immediately — no product DB query blocking it */}
+      <HeroSlider slides={slides} />
+
+      {/* Products stream in: skeleton shows instantly, real data follows */}
+      <Suspense fallback={<HomeContentSkeleton />}>
+        <HomeContent locale={locale} />
+      </Suspense>
     </main>
   );
 }
+
+// ─── Helper components ────────────────────────────────────────────────────────
 
 function TrustItem({ icon, text }: { icon: React.ReactNode; text: string }) {
   return (
@@ -412,6 +551,7 @@ function ProductGrid({
   offerLabel,
   newLabel,
   currencyCode,
+  priorityCount = 0,
 }: {
   title: string;
   subtitle: string;
@@ -421,6 +561,8 @@ function ProductGrid({
   offerLabel: string;
   newLabel: string;
   currencyCode: 'USD' | 'NPR';
+  /** Number of images from the top of the list to load with high priority (LCP optimisation). */
+  priorityCount?: number;
 }) {
   return (
     <section className="py-16 md:py-20 lg:py-24 px-4 bg-[#FDFCFB]">
@@ -452,6 +594,9 @@ function ProductGrid({
                       alt={p.name}
                       fill
                       sizes="(max-width: 640px) 50vw, 25vw"
+                      // First `priorityCount` images are above the fold — preload them for LCP
+                      priority={i < priorityCount}
+                      loading={i < priorityCount ? 'eager' : 'lazy'}
                     />
                   )}
                   {p.originalPrice && p.originalPrice > p.priceInside && (

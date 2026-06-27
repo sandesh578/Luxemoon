@@ -6,8 +6,40 @@ import { Star, ChevronRight } from 'lucide-react';
 import { formatCurrency } from '@/lib/currency';
 import { calculateDiscountedPrice } from '@/lib/settings';
 import { getSiteConfig } from '@/lib/settings-server';
+import { unstable_cache } from 'next/cache';
 
 export const revalidate = 60;
+
+const getCachedCategoryData = (slug: string) => unstable_cache(
+    async () => {
+        return prisma.category.findUnique({
+            where: { slug },
+            select: {
+                id: true,
+                name: true,
+                description: true,
+                image: true,
+                products: {
+                    where: { isActive: true, isArchived: false, isDraft: false },
+                    select: {
+                        id: true,
+                        slug: true,
+                        name: true,
+                        images: true,
+                        priceInside: true,
+                        originalPrice: true,
+                        isFeatured: true,
+                        stock: true,
+                        discountPercent: true, discountFixed: true, discountStart: true, discountEnd: true
+                    },
+                    orderBy: [{ isFeatured: 'desc' }, { createdAt: 'desc' }],
+                },
+            },
+        });
+    },
+    ['category-page-data', slug],
+    { revalidate: 300, tags: ['categories', 'products'] }
+)();
 
 export default async function CategoryPage({ params }: { params: Promise<{ slug: string }> }) {
     const { slug } = await params;
@@ -15,30 +47,7 @@ export default async function CategoryPage({ params }: { params: Promise<{ slug:
     const currencyCode = config.currencyCode === 'NPR' ? 'NPR' : 'USD';
     const formatPrice = (amount: number) => formatCurrency(amount, currencyCode);
 
-    const categoryData = await prisma.category.findUnique({
-        where: { slug },
-        select: {
-            id: true,
-            name: true,
-            description: true,
-            image: true,
-            products: {
-                where: { isActive: true, isArchived: false, isDraft: false },
-                select: {
-                    id: true,
-                    slug: true,
-                    name: true,
-                    images: true,
-                    priceInside: true,
-                    originalPrice: true,
-                    isFeatured: true,
-                    stock: true,
-                    discountPercent: true, discountFixed: true, discountStart: true, discountEnd: true
-                },
-                orderBy: [{ isFeatured: 'desc' }, { createdAt: 'desc' }],
-            },
-        },
-    });
+    const categoryData = await getCachedCategoryData(slug);
 
     if (!categoryData) notFound();
 
@@ -91,7 +100,7 @@ export default async function CategoryPage({ params }: { params: Promise<{ slug:
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-8 gap-y-12">
-                    {category.products.map(product => (
+                    {category.products.map((product, index) => (
                         <Link
                             key={product.id}
                             href={`/products/${product.slug}`}
@@ -105,7 +114,8 @@ export default async function CategoryPage({ params }: { params: Promise<{ slug:
                                         className="object-cover transition-transform duration-700 group-hover:scale-105"
                                         alt={product.name}
                                         sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
-                                        loading="lazy"
+                                        priority={index === 0}
+                                        loading={index === 0 ? 'eager' : 'lazy'}
                                     />
                                 )}
 

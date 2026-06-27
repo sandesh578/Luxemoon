@@ -18,8 +18,8 @@ import {
 
 export const revalidate = 60;
 
-const getCachedShopData = unstable_cache(
-  async (sortParam: string, filterParam: string) => {
+const getCachedShopData = (sortParam: string, filterParam: string) => unstable_cache(
+  async () => {
     let orderBy: any = [{ isFeatured: 'desc' }, { createdAt: 'desc' }];
     const where: Record<string, unknown> = { ...visibleStorefrontProductWhere };
 
@@ -57,9 +57,9 @@ const getCachedShopData = unstable_cache(
       currencyCode: config.currencyCode,
     } as const;
   },
-  ['shop-page-data', 'by-sort-filter'],
-  { tags: ['products', 'categories'], revalidate: 300 }
-);
+  ['shop-page-data', sortParam, filterParam],
+  { tags: ['products', 'categories', 'settings'], revalidate: 300 }
+)();
 
 export default async function ShopPage({ searchParams }: { searchParams: Promise<{ [key: string]: string | string[] | undefined }> }) {
   const locale = await getLocaleServer();
@@ -124,7 +124,7 @@ export default async function ShopPage({ searchParams }: { searchParams: Promise
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-8 gap-y-12">
-          {products.map(product => (
+          {products.map((product, index) => (
             <Link
               key={product.id}
               href={`/products/${product.slug}`}
@@ -138,7 +138,8 @@ export default async function ShopPage({ searchParams }: { searchParams: Promise
                     className="object-cover transition-transform duration-700 group-hover:scale-105"
                     alt={product.name}
                     sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
-                    loading="lazy"
+                    priority={index < 4}
+                    loading={index < 4 ? 'eager' : 'lazy'}
                   />
                 )}
 
