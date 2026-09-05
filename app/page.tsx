@@ -4,12 +4,18 @@ import dynamic from 'next/dynamic';
 import { Suspense } from 'react';
 import { prisma } from '@/lib/prisma';
 import { ChevronRight, Star, ShieldCheck, Zap, ArrowRight } from 'lucide-react';
-import { translate, type Locale } from '@/lib/i18n';
-import { getLocaleServer } from '@/lib/i18n-server';
+import { translate, type Locale, DEFAULT_LOCALE } from '@/lib/i18n';
 import { unstable_cache } from 'next/cache';
 import { formatCurrency } from '@/lib/currency';
 import { getSiteConfig } from '@/lib/settings-server';
 import { sanitizeAdminHtml } from '@/lib/sanitize-admin-html';
+
+// ─── ISR: statically generate this page and revalidate every 5 minutes ───────
+// Removing the cookies() read (getLocaleServer) was the critical change —
+// that single call was what forced Next.js into fully dynamic SSR mode,
+// meaning every visitor triggered a cold DB round-trip. Locale switching
+// still works correctly client-side via Providers.tsx.
+export const revalidate = 300;
 import {
   serializeStorefrontProduct,
   storefrontProductSelect,
@@ -512,10 +518,13 @@ async function HomeContent({ locale }: { locale: Locale }) {
 }
 
 // ─── Page entry point ─────────────────────────────────────────────────────────
-// Hero renders immediately from a single tiny DB read.
-// Everything else streams in via Suspense without blocking the hero.
+// ISR: Next.js pre-renders this page at build time and re-renders every 5 min.
+// Hero is populated from the cached DB read (getCachedHeroSlides).
+// Everything else streams in via Suspense.
 export default async function Home() {
-  const locale = await getLocaleServer();
+  // Use DEFAULT_LOCALE for ISR — client-side locale switching still works
+  // because Providers.tsx reads the locale cookie on hydration.
+  const locale: Locale = DEFAULT_LOCALE;
   const heroSlides = await getCachedHeroSlides();
   const slides = heroSlides.length > 0 ? heroSlides : [DEFAULT_HERO_SLIDE];
 

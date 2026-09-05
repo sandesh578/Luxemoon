@@ -9,6 +9,23 @@ import { getSiteConfig } from '@/lib/settings-server';
 import { unstable_cache } from 'next/cache';
 
 export const revalidate = 60;
+// Allow on-demand ISR for slugs not pre-rendered at build time
+export const dynamicParams = true;
+
+// Pre-render all active category pages at build time → SSG + ISR
+// Without this, Next.js has no slug list and falls back to ƒ Dynamic (DB hit every request)
+export async function generateStaticParams() {
+    try {
+        const categories = await prisma.category.findMany({
+            where: { isActive: true, isArchived: false },
+            select: { slug: true },
+        });
+        return categories.map((cat) => ({ slug: cat.slug }));
+    } catch {
+        // If DB is unavailable at build time, fall back to dynamic rendering
+        return [];
+    }
+}
 
 const getCachedCategoryData = (slug: string) => unstable_cache(
     async () => {

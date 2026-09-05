@@ -1,0 +1,91 @@
+customHeaders:
+  # ─── Public storefront pages: cache at CloudFront edge ───────────────────────
+  # s-maxage=60  → CloudFront keeps the page for 60 s before re-requesting origin
+  # stale-while-revalidate=300 → serve stale while background revalidation runs
+  - pattern: '/'
+    headers:
+      - key: 'Cache-Control'
+        value: 'public, s-maxage=60, stale-while-revalidate=300'
+
+  - pattern: '/shop'
+    headers:
+      - key: 'Cache-Control'
+        value: 'public, s-maxage=60, stale-while-revalidate=300'
+
+  - pattern: '/about'
+    headers:
+      - key: 'Cache-Control'
+        value: 'public, s-maxage=300, stale-while-revalidate=600'
+
+  - pattern: '/contact'
+    headers:
+      - key: 'Cache-Control'
+        value: 'public, s-maxage=300, stale-while-revalidate=600'
+
+  - pattern: '/category/**'
+    headers:
+      - key: 'Cache-Control'
+        value: 'public, s-maxage=60, stale-while-revalidate=300'
+
+  - pattern: '/products/**'
+    headers:
+      - key: 'Cache-Control'
+        value: 'public, s-maxage=60, stale-while-revalidate=300'
+
+  - pattern: '/delivery-policy'
+    headers:
+      - key: 'Cache-Control'
+        value: 'public, s-maxage=3600, stale-while-revalidate=7200'
+
+  - pattern: '/privacy'
+    headers:
+      - key: 'Cache-Control'
+        value: 'public, s-maxage=3600, stale-while-revalidate=7200'
+
+  - pattern: '/terms'
+    headers:
+      - key: 'Cache-Control'
+        value: 'public, s-maxage=3600, stale-while-revalidate=7200'
+
+  - pattern: '/refund-policy'
+    headers:
+      - key: 'Cache-Control'
+        value: 'public, s-maxage=3600, stale-while-revalidate=7200'
+
+  # ─── Next.js static assets: immutable forever ────────────────────────────────
+  - pattern: '/_next/static/**'
+    headers:
+      - key: 'Cache-Control'
+        value: 'public, max-age=31536000, immutable'
+
+  # ─── Public folder assets ─────────────────────────────────────────────────────
+  - pattern: '/images/**'
+    headers:
+      - key: 'Cache-Control'
+        value: 'public, max-age=86400, stale-while-revalidate=604800'
+
+  - pattern: '/favicon.ico'
+    headers:
+      - key: 'Cache-Control'
+        value: 'public, max-age=86400'
+
+  # ─── Auth + private pages: NEVER cache at CDN ────────────────────────────────
+  - pattern: '/admin/**'
+    headers:
+      - key: 'Cache-Control'
+        value: 'private, no-store'
+
+  - pattern: '/account/**'
+    headers:
+      - key: 'Cache-Control'
+        value: 'private, no-store'
+
+  - pattern: '/checkout/**'
+    headers:
+      - key: 'Cache-Control'
+        value: 'private, no-store'
+
+  - pattern: '/api/**'
+    headers:
+      - key: 'Cache-Control'
+        value: 'private, no-store'

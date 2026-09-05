@@ -1,17 +1,12 @@
 import type { Metadata } from 'next';
 import { getSiteConfig } from '@/lib/settings-server';
 import ContactClient from './ContactClient';
-import { getLocaleServer } from '@/lib/i18n-server';
+
+// Revalidate every hour — contact info rarely changes
+export const revalidate = 3600;
 
 export async function generateMetadata(): Promise<Metadata> {
-  const locale = await getLocaleServer();
-  if (locale === 'ne') {
-    return {
-      title: 'सम्पर्क | Luxe Moon',
-      description: 'Luxe Moon मा सम्पर्क गर्नुहोस्। हाम्रा प्रिमियम कोरियन हेयरकेयर उत्पादनहरूको साथ तपाईंलाई चम्काउन मद्दत गर्न हामी यहाँ छौं।',
-    };
-  }
-
+  // Use static English metadata — locale-specific variants are client-side
   return {
     title: 'Contact Us | Luxe Moon',
     description: 'Connect with Luxe Moon. We are here to help you shine with our premium Korean hair care products.',

@@ -1,13 +1,6 @@
 import { prisma } from '@/lib/prisma';
-import Link from 'next/link';
-import Image from 'next/image';
-import { Star, Sparkles, ChevronRight, Grid } from 'lucide-react';
 import { unstable_cache } from 'next/cache';
-
-import { SortDropdown } from './SortDropdown';
-import { translate } from '@/lib/i18n';
-import { getLocaleServer } from '@/lib/i18n-server';
-import { formatCurrency } from '@/lib/currency';
+import { Suspense } from 'react';
 import { getSiteConfig } from '@/lib/settings-server';
 import {
   serializeStorefrontProduct,
@@ -15,33 +8,47 @@ import {
   type StorefrontProductRecord,
   visibleStorefrontProductWhere,
 } from '@/lib/storefront-products';
+import { ShopClient } from './ShopClient';
 
+// ─── ISR: page is now STATIC ─────────────────────────────────────────────────
+// Sort/filter moved entirely to ShopClient (client-side, instant, no DB call).
+// ShopClient uses useSearchParams() which requires a <Suspense> boundary here —
+// without Suspense, Next.js 15 would opt the entire page into ƒ Dynamic mode.
 export const revalidate = 60;
 
-const getCachedShopData = (sortParam: string, filterParam: string) => unstable_cache(
+// ─── Skeleton shown while ShopClient JS hydrates ─────────────────────────────
+function ShopSkeleton() {
+  return (
+    <div className="min-h-screen bg-[#FDFCFB] animate-pulse">
+      <div className="bg-stone-900 py-16 px-4">
+        <div className="max-w-7xl mx-auto flex flex-col items-center gap-4">
+          <div className="h-10 w-64 bg-stone-700 rounded-lg" />
+          <div className="h-4 w-80 bg-stone-800 rounded" />
+        </div>
+      </div>
+      <div className="max-w-7xl mx-auto px-4 py-16">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-8 gap-y-12">
+          {Array.from({ length: 8 }).map((_, i) => (
+            <div key={i} className="space-y-3">
+              <div className="aspect-[3/4] rounded-3xl bg-stone-100" />
+              <div className="h-4 bg-stone-100 rounded w-3/4 mx-2" />
+              <div className="h-4 bg-stone-100 rounded w-1/3 mx-2" />
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const getCachedShopData = unstable_cache(
   async () => {
-    let orderBy: any = [{ isFeatured: 'desc' }, { createdAt: 'desc' }];
-    const where: Record<string, unknown> = { ...visibleStorefrontProductWhere };
-
-    if (sortParam === 'price_asc') orderBy = { priceInside: 'asc' };
-    else if (sortParam === 'price_desc') orderBy = { priceInside: 'desc' };
-    else if (sortParam === 'newest') orderBy = { createdAt: 'desc' };
-    else if (sortParam === 'bestselling') orderBy = [{ totalOrdersCount: 'desc' }, { createdAt: 'desc' }] as any;
-
-    if (filterParam === 'featured') {
-      where.isFeatured = true;
-    } else if (filterParam === 'new') {
-      where.isNew = true;
-    } else if (filterParam === 'bestsellers') {
-      orderBy = [{ totalOrdersCount: 'desc' }, { createdAt: 'desc' }] as any;
-    }
-
     const [config, productsRaw, categories] = await Promise.all([
       getSiteConfig(),
       prisma.product.findMany({
-        where,
+        where: visibleStorefrontProductWhere,
         select: storefrontProductSelect as any,
-        orderBy,
+        orderBy: [{ isFeatured: 'desc' }, { createdAt: 'desc' }],
       }) as unknown as Promise<StorefrontProductRecord[]>,
       prisma.category.findMany({
         select: { id: true, slug: true, name: true },
@@ -49,7 +56,9 @@ const getCachedShopData = (sortParam: string, filterParam: string) => unstable_c
       }),
     ]);
 
-    const products = productsRaw.map((product) => serializeStorefrontProduct(product, config));
+    const products = productsRaw.map((product) =>
+      serializeStorefrontProduct(product, config)
+    );
 
     return {
       products,
@@ -57,126 +66,24 @@ const getCachedShopData = (sortParam: string, filterParam: string) => unstable_c
       currencyCode: config.currencyCode,
     } as const;
   },
-  ['shop-page-data', sortParam, filterParam],
+  ['shop-page-data-static'],
   { tags: ['products', 'categories', 'settings'], revalidate: 300 }
-)();
+);
 
-export default async function ShopPage({ searchParams }: { searchParams: Promise<{ [key: string]: string | string[] | undefined }> }) {
-  const locale = await getLocaleServer();
-  const t = (key: string, vars?: Record<string, string | number>) => translate(locale, key, vars);
-  const { sort, filter } = await searchParams;
-  const sortParam = typeof sort === 'string' ? sort : '';
-  const filterParam = typeof filter === 'string' ? filter : '';
-
-  let pageTitle = t('shopPage.title');
-  let pageSubtitle = t('shopPage.subtitle');
-
-  if (filterParam === 'featured') {
-    pageTitle = t('shopPage.featuredTitle');
-    pageSubtitle = t('shopPage.featuredSubtitle');
-  } else if (filterParam === 'new') {
-    pageTitle = t('shopPage.newTitle');
-    pageSubtitle = t('shopPage.newSubtitle');
-  } else if (filterParam === 'bestsellers') {
-    pageTitle = t('shopPage.bestTitle');
-    pageSubtitle = t('shopPage.bestSubtitle');
-  }
-
-  const { products, categories, currencyCode: cachedCurrencyCode } = await getCachedShopData(sortParam, filterParam);
-  const currencyCode = cachedCurrencyCode === 'NPR' ? 'NPR' : 'USD';
-  const formatPrice = (amount: number) => formatCurrency(amount, currencyCode);
+export default async function ShopPage() {
+  const { products, categories, currencyCode: rawCurrencyCode } = await getCachedShopData();
+  const currencyCode = rawCurrencyCode === 'NPR' ? 'NPR' : 'USD';
 
   return (
-    <div className="min-h-screen bg-[#FDFCFB]">
-      {/* Shop Header */}
-      <section className="bg-stone-900 text-white py-16 px-4">
-        <div className="max-w-7xl mx-auto flex flex-col items-center text-center space-y-4">
-          <h1 className="font-serif text-4xl md:text-5xl font-bold">{pageTitle}</h1>
-          <p className="text-stone-400 max-w-lg">{pageSubtitle}</p>
-        </div>
-      </section>
-
-      {/* Category Quick Links */}
-      <div className="bg-white border-b border-stone-100 sticky top-16 z-10 overflow-x-auto no-scrollbar">
-        <div className="max-w-7xl mx-auto px-4 flex gap-8 py-4">
-          <Link href="/shop" className="text-sm font-bold text-amber-600 whitespace-nowrap border-b-2 border-amber-600 pb-1">
-            {t('shopPage.allProducts')}
-          </Link>
-          {categories.map(cat => (
-            <Link
-              key={cat.id}
-              href={`/category/${cat.slug}`}
-              className="text-sm font-bold text-stone-400 hover:text-stone-900 transition-colors whitespace-nowrap"
-            >
-              {cat.name}
-            </Link>
-          ))}
-        </div>
-      </div>
-
-      <div className="max-w-7xl mx-auto px-4 py-16">
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-12">
-          <div className="flex items-center gap-2 text-stone-400">
-            <Grid className="w-4 h-4" />
-            <span className="text-xs font-bold uppercase tracking-widest">{t('shopPage.showingItems', { count: products.length })}</span>
-          </div>
-          <SortDropdown />
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-8 gap-y-12">
-          {products.map((product, index) => (
-            <Link
-              key={product.id}
-              href={`/products/${product.slug}`}
-              className="group cursor-pointer block"
-            >
-              <div className="relative aspect-[3/4] overflow-hidden rounded-3xl bg-stone-100 mb-4 shadow-sm group-hover:shadow-2xl transition-all duration-500">
-                {product.images[0] && (
-                  <Image
-                    src={product.images[0]}
-                    fill
-                    className="object-cover transition-transform duration-700 group-hover:scale-105"
-                    alt={product.name}
-                    sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
-                    priority={index < 4}
-                    loading={index < 4 ? 'eager' : 'lazy'}
-                  />
-                )}
-
-                <div className="absolute top-4 left-4 flex flex-col gap-2">
-                  {product.isFeatured && (
-                    <span className="text-[10px] font-bold bg-amber-500/90 text-white px-2 py-1 rounded-full flex items-center gap-1 backdrop-blur-sm shadow-lg">
-                      <Star className="w-2 h-2 fill-current" /> {t('shopPage.bestseller').toUpperCase()}
-                    </span>
-                  )}
-                  {product.originalPrice && product.originalPrice > product.priceInside && (
-                    <span className="text-[10px] font-bold bg-red-600 text-white px-3 py-1 rounded-full shadow-lg">
-                      {t('shopPage.offer').toUpperCase()}
-                    </span>
-                  )}
-                </div>
-
-                {product.stock <= 0 && (
-                  <div className="absolute inset-0 bg-stone-900/40 flex items-center justify-center backdrop-blur-[2px]">
-                    <span className="bg-stone-900 border border-stone-800 text-white px-4 py-2 text-[10px] font-bold uppercase tracking-widest rounded-full">{t('shopPage.soldOut')}</span>
-                  </div>
-                )}
-              </div>
-              <div className="space-y-1.5 px-2">
-                <h3 className="font-serif text-lg text-stone-900 group-hover:text-amber-700 transition-colors">
-                  {product.name}
-                </h3>
-                <div className="flex items-center gap-3">
-                  <span className="font-bold text-stone-900">{formatPrice(product.priceInside)}</span>
-                  {product.originalPrice && product.originalPrice > product.priceInside && (
-                    <span className="text-xs text-stone-400 line-through">{formatPrice(product.originalPrice)}</span>
-                  )}
-                </div>
-              </div>
-            </Link>
-          ))}
-        </div>
-      </div>
-    </div>
+    // Suspense is REQUIRED here — useSearchParams() inside ShopClient
+    // would otherwise force the whole page into ƒ Dynamic mode.
+    <Suspense fallback={<ShopSkeleton />}>
+      <ShopClient
+        allProducts={products}
+        categories={categories}
+        currencyCode={currencyCode}
+      />
+    </Suspense>
   );
 }
+

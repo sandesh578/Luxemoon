@@ -1,12 +1,11 @@
 import { getSiteConfig } from '@/lib/settings-server';
-import { translate } from '@/lib/i18n';
-import { getLocaleServer } from '@/lib/i18n-server';
+import { translate, DEFAULT_LOCALE } from '@/lib/i18n';
 import { sanitizeAdminHtml } from '@/lib/sanitize-admin-html';
 
 export const revalidate = 60;
 
 export default async function AboutPage() {
-  const locale = await getLocaleServer();
+  const locale = DEFAULT_LOCALE;
   const t = (key: string, vars?: Record<string, string | number>) => translate(locale, key, vars);
   const config = await getSiteConfig();
 
