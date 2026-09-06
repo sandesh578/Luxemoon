@@ -1,20 +1,33 @@
 import { MetadataRoute } from 'next';
 import { prisma } from '@/lib/prisma';
+import { unstable_cache } from 'next/cache';
 
-export const dynamic = 'force-dynamic';
+// Revalidate every hour — sitemap doesn't need real-time accuracy.
+// Previously had force-dynamic which caused 14-second crawl times on every Google bot hit.
+export const revalidate = 3600;
+
+const getCachedSitemapData = unstable_cache(
+  async () => {
+    const [products, categories] = await Promise.all([
+      prisma.product.findMany({
+        where: { isActive: true, isArchived: false, isDraft: false },
+        select: { slug: true, updatedAt: true }
+      }),
+      prisma.category.findMany({
+        where: { isActive: true, isArchived: false },
+        select: { slug: true, updatedAt: true }
+      }),
+    ]);
+    return { products, categories };
+  },
+  ['sitemap-data'],
+  { tags: ['products', 'categories'], revalidate: 3600 }
+);
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.luxemoonbeauty.com';
 
-  const products = await prisma.product.findMany({
-    where: { isActive: true, isArchived: false, isDraft: false },
-    select: { slug: true, updatedAt: true }
-  });
-
-  const categories = await prisma.category.findMany({
-    where: { isActive: true, isArchived: false },
-    select: { slug: true, updatedAt: true }
-  });
+  const { products, categories } = await getCachedSitemapData();
 
   const productEntries: MetadataRoute.Sitemap = products.map((product) => ({
     url: `${baseUrl}/products/${product.slug}`,

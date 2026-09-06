@@ -55,13 +55,15 @@ const SAFE_SITE_CONFIG = {
 
 const playfair = Playfair_Display({
   subsets: ["latin"],
-  variable: "--font-serif"
+  variable: "--font-serif",
+  display: "swap",          // Show fallback font immediately; swap when loaded (improves LCP)
 });
 
 const lato = Lato({
-  weight: ["300", "400", "700"],
+  weight: ["300", "400", "700"],  // 300 used in HeroSlider/CommunitySlider (font-light)
   subsets: ["latin"],
-  variable: "--font-sans"
+  variable: "--font-sans",
+  display: "swap",          // Critical: prevents invisible text (FOIT) during font load
 });
 
 export async function generateMetadata(): Promise<Metadata> {

@@ -104,6 +104,16 @@ const nextConfig: NextConfig = {
       source: '/checkout/:path*',
       headers: [{ key: 'Cache-Control', value: 'private, no-store' }],
     },
+    // ─── Sitemap & robots: publicly cacheable, refresh hourly ─────────────────
+    {
+      source: '/sitemap.xml',
+      headers: [{ key: 'Cache-Control', value: 'public, s-maxage=3600, stale-while-revalidate=7200' }],
+    },
+    {
+      source: '/robots.txt',
+      headers: [{ key: 'Cache-Control', value: 'public, s-maxage=86400, stale-while-revalidate=604800' }],
+    },
+
   ],
 };
 
